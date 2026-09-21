@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sledování stavu opravy vozidla</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 40px auto; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); text-align: center; }
+        h1 { color: #1a1a1a; margin-top: 0; }
+        .spz-input { font-size: 26px; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; text-align: center; border: 2px solid #ccc; border-radius: 8px; padding: 12px; width: 100%; box-sizing: border-box; margin-top: 15px; }
+        button { background: #0066cc; color: white; border: none; padding: 14px 20px; border-radius: 8px; font-size: 18px; cursor: pointer; width: 100%; margin-top: 15px; font-weight: bold; }
+        button:hover { background: #0052a3; }
+        .status-badge { display: inline-block; padding: 10px 20px; border-radius: 20px; font-weight: bold; font-size: 20px; margin-top: 10px; }
+        .status-Příjem { background: #e3f2fd; color: #0d47a1; }
+        .status-Diagnostika { background: #fff3e0; color: #e65100; }
+        .status-Oprava { background: #e8f5e9; color: #1b5e20; }
+        .status-Čekání\ na\ díly { background: #f3e5f5; color: #4a148c; }
+        .status-Hotovo { background: #4caf50; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <h1>🚗 Sledování stavu opravy</h1>
+        <p>Zadejte SPZ vašeho vozidla pro zjištění stavu:</p>
+        <input type="text" id="customer-spz" class="spz-input" placeholder="např. 1AB 2345" maxlength="10">
+        <button onclick="checkStatus()">Zjistit stav</button>
+
+        <div id="status-result" style="display: none; margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px; text-align: left;">
+            <h2 id="res-model" style="margin-top: 0;"></h2>
+            <p><strong>SPZ:</strong> <span id="res-spz"></span></p>
+            <p><strong>Aktuální stav:</strong></p>
+            <div id="res-status" class="status-badge"></div>
+            <p style="margin-top: 20px;"><strong>Poznámka ze servisu:</strong> <br><span id="res-note"></span></p>
+            <small style="color: #666;">Naposledy aktualizováno: <span id="res-updated"></span></small>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function checkStatus() {
+        const spz = document.getElementById('customer-spz').value;
+        if (!spz) return alert('Zadejte SPZ');
+
+        try {
+            const res = await fetch(`/api/status/${encodeURIComponent(spz)}`);
+            const data = await res.json();
+
+            if (res.ok) {
+                document.getElementById('res-model').innerText = data.model;
+                document.getElementById('res-spz').innerText = data.spz;
+                
+                const statusBadge = document.getElementById('res-status');
+                statusBadge.innerText = data.status;
+                statusBadge.className = `status-badge status-${data.status.replace(/\s+/g, '\\ ')}`;
+
+                document.getElementById('res-note').innerText = data.note || 'Bez poznámky';
+                document.getElementById('res-updated').innerText = new Date(data.updated_at).toLocaleString('cs-CZ');
+                document.getElementById('status-result').style.display = 'block';
+            } else {
+                alert(data.error);
+                document.getElementById('status-result').style.display = 'none';
+            }
+        } catch (err) {
+            alert('Chyba při komunikaci se serverem');
+        }
+    }
+</script>
+
+</body>
+</html>

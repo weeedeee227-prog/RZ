@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administrace servisu</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        h1, h2 { color: #1a1a1a; margin-top: 0; }
+        button { background: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #218838; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border-bottom: 1px solid #ddd; padding: 12px; text-align: left; vertical-align: middle; }
+        th { background: #f8f9fa; }
+        select, input[type="text"] { padding: 8px; border-radius: 6px; border: 1px solid #ccc; width: 100%; box-sizing: border-box; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .full-width { grid-column: span 2; }
+        .status-select { font-weight: bold; padding: 6px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <h1>⚙️ Správa vozidel v servisu</h1>
+        
+        <h2>Přidat nové vozidlo</h2>
+        <div class="form-grid">
+            <input type="text" id="adm-spz" placeholder="SPZ (např. 1AB2345)">
+            <input type="text" id="adm-model" placeholder="Model auta (např. Škoda Octavia III)">
+            <select id="adm-status">
+                <option value="Příjem">Příjem vozidla</option>
+                <option value="Diagnostika">Diagnostika</option>
+                <option value="Čekání na díly">Čekání na díly</option>
+                <option value="Oprava">Probíhá oprava</option>
+                <option value="Hotovo">Hotovo k vyzvednutí</option>
+            </select>
+            <input type="text" id="adm-note" placeholder="Poznámka (např. Čekáme na brzdové kotouče)">
+        </div>
+        <button onclick="saveVehicle()" style="width: 100%; margin-top: 10px;">+ Přidat vozidlo do servisu</button>
+
+        <h2 style="margin-top: 40px;">Všechna registrovaná auta v servisu</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 15%;">SPZ</th>
+                    <th style="width: 20%;">Model</th>
+                    <th style="width: 25%;">Aktuální stav</th>
+                    <th style="width: 25%;">Poznámka</th>
+                    <th style="width: 15%;">Akce</th>
+                </tr>
+            </thead>
+            <tbody id="admin-table"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    loadAdminVehicles();
+
+    // Načtení všech registrovaných aut
+    async function loadAdminVehicles() {
+        try {
+            const res = await fetch('/api/admin/vehicles');
+            const vehicles = await res.json();
+            
+            const tbody = document.getElementById('admin-table');
+            tbody.innerHTML = '';
+
+            if (vehicles.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">Zatím nejsou registrovaná žádná auta.</td></tr>';
+                return;
+            }
+
+            vehicles.forEach(v => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${v.spz}</strong></td>
+                    <td>${v.model}</td>
+                    <td>
+                        <select class="status-select" onchange="quickUpdateStatus('${v.spz}', '${v.model}', this.value, '${v.note || ''}')">
+                            <option value="Příjem" ${v.status === 'Příjem' ? 'selected' : ''}>Příjem vozidla</option>
+                            <option value="Diagnostika" ${v.status === 'Diagnostika' ? 'selected' : ''}>Diagnostika</option>
+                            <option value="Čekání na díly" ${v.status === 'Čekání na díly' ? 'selected' : ''}>Čekání na díly</option>
+                            <option value="Oprava" ${v.status === 'Oprava' ? 'selected' : ''}>Probíhá oprava</option>
+                            <option value="Hotovo" ${v.status === 'Hotovo' ? 'selected' : ''}>Hotovo k vyzvednutí</option>
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text" value="${v.note || ''}" onchange="quickUpdateNote('${v.spz}', '${v.model}', '${v.status}', this.value)" placeholder="Přidat poznámku...">
+                    </td>
+                    <td>
+                        <button onclick="deleteVehicle(${v.id})" style="background: #dc3545; padding: 6px 12px; font-size: 14px;">Smazat</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            console.error('Chyba při načítání aut:', err);
+        }
+    }
+
+    // Přidání nového auta
+    async function saveVehicle() {
+        const spz = document.getElementById('adm-spz').value;
+        const model = document.getElementById('adm-model').value;
+        const status = document.getElementById('adm-status').value;
+        const note = document.getElementById('adm-note').value;
+
+        if (!spz || !model) {
+            return alert('Vyplňte prosím SPZ a model auta.');
+        }
+
+        const res = await fetch('/api/admin/vehicles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spz, model, status, note })
+        });
+
+        if (res.ok) {
+            document.getElementById('adm-spz').value = '';
+            document.getElementById('adm-model').value = '';
+            document.getElementById('adm-note').value = '';
+            loadAdminVehicles();
+        } else {
+            const data = await res.json();
+            alert(data.error);
+        }
+    }
+
+    // Rychlá změna stavu v rozbalovacím menu přímo v tabulce
+    async function quickUpdateStatus(spz, model, newStatus, note) {
+        await fetch('/api/admin/vehicles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spz, model, status: newStatus, note })
+        });
+        loadAdminVehicles();
+    }
+
+    // Rychlá úprava poznámky přímo v tabulce
+    async function quickUpdateNote(spz, model, status, newNote) {
+        await fetch('/api/admin/vehicles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spz, model, status, note: newNote })
+        });
+        loadAdminVehicles();
+    }
+
+    // Odstranění auta
+    async function deleteVehicle(id) {
+        if (!confirm('Opravdu chcete vozidlo ze systému odstranit?')) return;
+        await fetch(`/api/admin/vehicles/${id}`, { method: 'DELETE' });
+        loadAdminVehicles();
+    }
+</script>
+
+</body>
+</html>
