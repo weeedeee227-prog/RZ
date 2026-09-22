@@ -46,7 +46,6 @@
 <body>
 
 <div class="container">
-    <!-- Horní lišta: Vlevo tlačítko aktualizace a hlavní stránka -->
     <div class="top-nav">
         <button onclick="forceUpdateApp()" class="nav-btn update-btn">🔄 Aktualizovat</button>
         <a href="/" class="nav-btn">← Hlavní stránka</a>
@@ -92,7 +91,6 @@
     <h2>Seznam vozidel</h2>
     <div id="carListContainer" class="car-list"></div>
 
-    <!-- Verze uprostřed dole -->
     <div style="text-align: center; margin-top: 25px; margin-bottom: 10px;">
         <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v1.4</span>
     </div>
@@ -144,7 +142,7 @@
                             </div>
                             <div class="car-body">
                                 <div class="car-row"><strong>Stav:</strong> <span style="color:#0066cc;">${car.status}</span></div>
-                                ${car.phone ? `<div class="car-row"><strong>Telefon:</strong> <a href="tel:${car.phone}">${car.phone}</a></div>` : ''}
+                                <div class="car-row"><strong>Telefon:</strong> ${car.phone ? `<a href="tel:${car.phone}">${car.phone}</a>` : '-'}</div>
                                 <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
                                 <div class="car-meta">
                                     <div>Zapsal: <strong>${car.created_by || '-'}</strong></div>
@@ -167,7 +165,7 @@
         document.getElementById('model').value = model;
         document.getElementById('status').value = status;
         document.getElementById('note').value = note === '-' ? '' : note;
-        document.getElementById('phone').value = phone || '';
+        document.getElementById('phone').value = (phone && phone !== 'undefined') ? phone : '';
         
         document.getElementById('formTitle').innerText = 'Upravit vozidlo (' + spz + ')';
         document.getElementById('formModeIndicator').innerText = 'Režim: Úprava';
