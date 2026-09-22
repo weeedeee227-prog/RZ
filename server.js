@@ -1,199 +1,238 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
+const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
-const cookieParser = require('cookie-parser');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+const DB_FILE = 'servis.db';
+const BACKUP_FILE = 'servis_backup.db';
+
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use(express.static(path.join(__dirname)));
 
-// Cesta k databázovému souboru na disku
-const dbPath = path.join(__dirname, 'servis.db');
-const backupPath = path.join(__dirname, 'servis_backup.db');
+// Inicializace SQLite databáze
+const db = new sqlite3.Database(DB_FILE, (err) => {
+    if (err) {
+        console.error('Chyba při otevírání databáze:', err.message);
+    } else {
+        console.log('Připojeno k SQLite databázi.');
+        initDb();
+    }
+});
 
-// Pokud máme zálohu z dřívějška a hlavní DB neexistuje, obnovíme ji
-if (!fs.existsSync(dbPath) && fs.existsSync(backupPath)) {
-    fs.copyFileSync(backupPath, dbPath);
-    console.log('Databáze byla obnovena ze zálohy na disku.');
+// Vytvoření tabulky vozidel, pokud neexistuje
+function initDb() {
+    const createTableQuery = `
+        CREATE TABLE IF NOT EXISTS vehicles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            spz TEXT UNIQUE NOT NULL,
+            model TEXT NOT NULL,
+            status TEXT NOT NULL,
+            note TEXT,
+            created_by TEXT,
+            updated_by TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `;
+    db.run(createTableQuery, (err) => {
+        if (err) console.error('Chyba při vytváření tabulky:', err.message);
+    });
 }
 
-// Připojení k SQLite databázi
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) console.error('Chyba při otevírání databáze:', err.message);
-    else console.log('Připojeno k SQLite databázi na disku.');
-});
-
-// Vytvoření tabulek a bezpečné přidání sloupců pro logování
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS vehicles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        spz TEXT UNIQUE NOT NULL,
-        model TEXT NOT NULL,
-        status TEXT NOT NULL,
-        note TEXT,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-
-    // Bezpečné přidání nových sloupců do existující tabulky
-    db.run(`ALTER TABLE vehicles ADD COLUMN created_by TEXT`, (err) => {});
-    db.run(`ALTER TABLE vehicles ADD COLUMN updated_by TEXT`, (err) => {});
-
-    db.run(`CREATE TABLE IF NOT EXISTS users (
-        username TEXT PRIMARY KEY,
-        password TEXT NOT NULL
-    )`, () => {
-        const defaultUsers = [
-            ['StepanSigmund', '62612Alfa'],
-            ['DenisLiulic', 'pofelsibro3103']
-        ];
-        
-        const stmt = db.prepare(`INSERT OR REPLACE INTO users (username, password) VALUES (?, ?)`);
-        defaultUsers.forEach(user => stmt.run(user));
-        stmt.finalize();
-    });
-});
-
-// Funkce pro automatické uložení (zálohu) databáze na disk
-function ulozZalohu() {
-    try {
-        if (fs.existsSync(dbPath)) {
-            fs.copyFileSync(dbPath, backupPath);
-            console.log('Záloha databáze na disk byla úspěšně vytvořena.');
-        }
-    } catch (err) {
-        console.error('Chyba při zálohování databáze:', err.message);
-    }
+// Funkce pro zkrácení jména na 2 + 2 písmena (StepanSigmund -> StSi, DenisLiulic -> DeLi)
+function formatUser(fullName) {
+    if (!fullName) return '-';
+    if (fullName === 'StepanSigmund') return 'StSi';
+    if (fullName === 'DenisLiulic') return 'DeLi';
+    // Univerzální záloha pro případné jiné uživatele
+    return fullName.substring(0, 4);
 }
 
-// Zálohujeme databázi každou hodinu automaticky na pozadí
-setInterval(ulozZalohu, 60 * 60 * 1000);
-
-// Middleware pro kontrolu přihlášení
-function requireLogin(req, res, next) {
-    const user = req.cookies.logged_user;
-    if (!user) {
-        return res.send(`
-            <!DOCTYPE html>
-            <html lang="cs">
-            <head>
-                <meta charset="UTF-8">
-                <title>Přihlášení do servisu</title>
-                <style>
-                    body { font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-                    .login-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 300px; }
-                    h2 { margin-top: 0; color: #333; text-align: center; }
-                    input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-                    button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-                    button:hover { background: #0056b3; }
-                </style>
-            </head>
-            <body>
-                <div class="login-card">
-                    <h2>Pofel Garage</h2>
-                    <form method="POST" action="/api/login">
-                        <input type="text" name="username" placeholder="Uživatelské jméno" required>
-                        <input type="password" name="password" placeholder="Heslo" required>
-                        <button type="submit">Přihlásit se</button>
-                    </form>
-                </div>
-            </body>
-            </html>
-        `);
-    }
-    next();
-}
-
-// Zpracování přihlášení
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    db.get(`SELECT * FROM users WHERE username = ? AND password = ?`, [username, password], (err, row) => {
-        if (err || !row) {
-            return res.send(`<script>alert('Nesprávné jméno nebo heslo!'); window.location='/admin.html';</script>`);
-        }
-        res.cookie('logged_user', row.username, { httpOnly: true, maxAge: 86400000 });
-        res.redirect('/admin.html');
-    });
-});
-
-// ==========================================
-// ZABEZPEČENÉ ADMIN ROUTY
-// ==========================================
-app.get('/admin.html', requireLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin.html'));
-});
-
-app.get('/api/admin/vehicles', requireLogin, (req, res) => {
-    db.all(`SELECT * FROM vehicles ORDER BY updated_at DESC`, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: 'Chyba databáze' });
-        res.json(rows);
-    });
-});
-
-app.post('/api/admin/vehicles', requireLogin, (req, res) => {
-    const { spz, model, status, note } = req.body;
-    const currentUser = req.cookies.logged_user;
-
-    if (!spz || !model || !status) {
-        return res.status(400).json({ error: 'Vyplňte SPZ, model a stav.' });
-    }
-
-    const cleanSpz = spz.trim().toUpperCase();
-
-    db.get(`SELECT created_by FROM vehicles WHERE spz = ?`, [cleanSpz], (err, existingRow) => {
-        if (err) return res.status(500).json({ error: 'Chyba databáze' });
-
-        const creator = existingRow ? existingRow.created_by : currentUser;
-
-        const sql = `INSERT INTO vehicles (spz, model, status, note, created_by, updated_by, updated_at) 
-                     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                     ON CONFLICT(spz) DO UPDATE SET 
-                        model = excluded.model,
-                        status = excluded.status,
-                        note = excluded.note,
-                        updated_by = excluded.updated_by,
-                        updated_at = CURRENT_TIMESTAMP`;
-
-        db.run(sql, [cleanSpz, model, status, note || '', creator, currentUser], function(err) {
-            if (err) return res.status(500).json({ error: 'Chyba při ukládání: ' + err.message });
-            
-            // Okamžitě po uložení auta vytvoříme zálohu na disk
-            ulozZalohu();
-            
-            res.json({ message: 'Uloženo úspěšně' });
+// Automatické zálohování databáze každou hodinu
+setInterval(() => {
+    if (fs.existsSync(DB_FILE)) {
+        fs.copyFile(DB_FILE, BACKUP_FILE, (err) => {
+            if (err) console.error('Chyba při zálohování databáze:', err);
+            else console.log('Databáze byla zálohována.');
         });
-    });
+    }
+}, 3600000);
+
+// --- AUTENTIZACE ---
+
+const USERS = {
+    'StepanSigmund': 'heslo123',
+    'DenisLiulic': 'heslo456'
+};
+
+// Middleware pro ověření přihlášení
+function checkAuth(req, res, next) {
+    const user = req.cookies.logged_user;
+    if (user && USERS[user]) {
+        req.user = user;
+        next();
+    } else {
+        res.redirect('/login.html');
+    }
+}
+
+// Přihlašovací stránka (jednoduchý HTML formulář)
+app.get('/login.html', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="cs">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Pofel Garage - Přihlášení</title>
+            <style>
+                body { font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                .login-box { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 300px; }
+                h2 { text-align: center; color: #1a1a1a; }
+                .form-group { margin-bottom: 15px; }
+                label { display: block; margin-bottom: 5px; font-weight: bold; }
+                input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+                button { background: #0066cc; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; }
+                button:hover { background: #0052a3; }
+                .error { color: red; font-size: 13px; text-align: center; margin-bottom: 10px; }
+            </style>
+        </head>
+        <body>
+            <div class="login-box">
+                <h2>Pofel Garage</h2>
+                ${req.query.error ? '<div class="error">Nesprávné jméno nebo heslo!</div>' : ''}
+                <form action="/login" method="POST">
+                    <div class="form-group">
+                        <label>Uživatel:</label>
+                        <select name="username">
+                            <option value="StepanSigmund">Štěpán Sigmund</option>
+                            <option value="DenisLiulic">Denis Liulič</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Heslo:</label>
+                        <input type="password" name="password" required>
+                    </div>
+                    <button type="submit">Přihlásit se</button>
+                </form>
+            </div>
+        </body>
+        </html>
+    `);
 });
 
-app.delete('/api/admin/vehicles/:id', requireLogin, (req, res) => {
-    db.run(`DELETE FROM vehicles WHERE id = ?`, [req.params.id], function(err) {
-        if (err) return res.status(500).json({ error: 'Chyba při mazání' });
-        
-        // Záloha po smazání
-        ulozZalohu();
-        
-        res.json({ message: 'Smazáno' });
-    });
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+    if (USERS[username] && USERS[username] === password) {
+        res.cookie('logged_user', username, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true });
+        res.redirect('/admin.html');
+    } else {
+        res.redirect('/login.html?error=1');
+    }
 });
 
-// ==========================================
-// VEŘEJNÉ SOUBORY A WEBY
-// ==========================================
-app.use(express.static('.'));
-
+// Hlavní stránka (pro zákazníky - veřejná)
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.get('/api/status/:spz', (req, res) => {
-    const spz = req.params.spz.replace(/\s+/g, '').toUpperCase();
+// Administrační stránka (chráněná)
+app.get('/admin.html', checkAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
+});
 
-    db.get(`SELECT * FROM vehicles WHERE REPLACE(spz, ' ', '') = ?`, [spz], (err, row) => {
-        if (err) return res.status(500).json({ error: 'Chyba databáze' });
-        if (!row) return res.status(404).json({ error: 'Vozidlo s touto SPZ nebylo nalezeno.' });
-        res.json(row);
+// --- API ENDPOINTY ---
+
+// Veřejné API pro vyhledávání vozidel zákazníky (neobsahuje jména tvůrců)
+app.get('/api/vehicles', (req, res) => {
+    const spz = req.query.spz;
+    let query = "SELECT spz, model, status, note, updated_at FROM vehicles";
+    let params = [];
+
+    if (spz) {
+        query += " WHERE spz LIKE ?";
+        params.push(`%${spz.trim().toUpperCase()}%`);
+    }
+
+    db.all(query, params, (err, rows) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+        } else {
+            res.json(rows);
+        }
     });
 });
 
-app.listen(3000, () => console.log('Servisní systém běží na http://localhost:3000'));
+// Administrační API - získání všech vozidel (včetně zkrácených jmen)
+app.get('/api/admin/vehicles', checkAuth, (req, res) => {
+    db.all("SELECT * FROM vehicles ORDER BY id DESC", [], (err, rows) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+        } else {
+            res.json(rows);
+        }
+    });
+});
+
+// Administrační API - přidání nebo aktualizace vozidla
+app.post('/api/admin/vehicles', checkAuth, (req, res) => {
+    let { spz, model, status, note } = req.body;
+    if (!spz || !model || !status) {
+        return res.status(400).json({ error: 'Vyplňte povinná pole (SPZ, model, stav).' });
+    }
+
+    spz = spz.trim().toUpperCase();
+    const currentUserFormatted = formatUser(req.user); // Zkrácení na StSi / DeLi
+
+    // Zjistíme, jestli vozidlo už v databázi existuje
+    db.get("SELECT * FROM vehicles WHERE spz = ?", [spz], (err, row) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+
+        if (row) {
+            // Vozidlo existuje -> Aktualizujeme ho (změní se stav/poznámka a sloupec updated_by)
+            const updateQuery = `
+                UPDATE vehicles 
+                SET model = ?, status = ?, note = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP 
+                WHERE spz = ?
+            `;
+            db.run(updateQuery, [model, status, note, currentUserFormatted, spz], function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ message: 'Vozidlo úspěšně aktualizováno.' });
+            });
+        } else {
+            // Vozidlo neexistuje -> Vytvoříme nové (zapisuje se created_by i updated_by)
+            const insertQuery = `
+                INSERT INTO vehicles (spz, model, status, note, created_by, updated_by, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            `;
+            db.run(insertQuery, [spz, model, status, note, currentUserFormatted, currentUserFormatted], function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ message: 'Vozidlo úspěšně přidáno.' });
+            });
+        }
+    });
+});
+
+// Administrační API - smazání vozidla
+app.delete('/api/admin/vehicles/:id', checkAuth, (req, res) => {
+    const id = req.params.id;
+    db.run("DELETE FROM vehicles WHERE id = ?", [id], function(err) {
+        if (err) {
+            res.status(500).json({ error: err.message });
+        } else {
+            res.json({ message: 'Vozidlo smazáno.' });
+        }
+    });
+});
+
+// Spuštění serveru
+app.listen(PORT, () => {
+    console.log(`Server běží na portu ${PORT}`);
+});
