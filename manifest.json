@@ -1,0 +1,15 @@
+{
+  "name": "Pofel Garage",
+  "short_name": "PofelGarage",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f2f5",
+  "theme_color": "#0066cc",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
