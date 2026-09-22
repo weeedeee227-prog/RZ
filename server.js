@@ -14,6 +14,12 @@ const db = new sqlite3.Database('./database.sqlite', (err) => {
     else console.log('Připojeno k SQLite.');
 });
 
+// --- DATABÁZE ---
+const db = new sqlite3.Database('./database.sqlite', (err) => {
+    if (err) console.error('Chyba DB:', err.message);
+    else console.log('Připojeno k SQLite.');
+});
+
 db.serialize(() => {
     // Tabulka vozidel
     db.run(`CREATE TABLE IF NOT EXISTS vehicles (
@@ -28,14 +34,13 @@ db.serialize(() => {
     )`);
 
     // Tabulka uživatelů pro mechaniky
-    db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL
     )`);
 
-    // Vynucení vytvoření nebo aktualizace uživatelů při každém startu serveru
+    // Vynucení vytvoření výchozích uživatelů
     db.run("INSERT OR IGNORE INTO users (username, password) VALUES ('StSi', 'Stsi3103*')");
     db.run("INSERT OR IGNORE INTO users (username, password) VALUES ('DeLi', 'Deli3103*')");
 });
