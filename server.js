@@ -14,12 +14,6 @@ const db = new sqlite3.Database('./database.sqlite', (err) => {
     else console.log('Připojeno k SQLite.');
 });
 
-// --- DATABÁZE ---
-const db = new sqlite3.Database('./database.sqlite', (err) => {
-    if (err) console.error('Chyba DB:', err.message);
-    else console.log('Připojeno k SQLite.');
-});
-
 db.serialize(() => {
     // Tabulka vozidel
     db.run(`CREATE TABLE IF NOT EXISTS vehicles (
@@ -43,10 +37,6 @@ db.serialize(() => {
     // Vynucení vytvoření výchozích uživatelů
     db.run("INSERT OR IGNORE INTO users (username, password) VALUES ('StSi', 'Stsi3103*')");
     db.run("INSERT OR IGNORE INTO users (username, password) VALUES ('DeLi', 'Deli3103*')");
-});
-            }
-        });
-    });
 });
 
 // --- API ENDPOINTY ---
@@ -309,7 +299,6 @@ app.get('/admin.html', (req, res) => {
     <script>
         let currentUser = null;
 
-        document.getElementById('login-form').getElementById = document.getElementById('login-form'); // safety
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const userInput = document.getElementById('login-user').value.trim();
@@ -351,7 +340,7 @@ app.get('/admin.html', (req, res) => {
             e.preventDefault();
             const data = {
                 spz: document.getElementById('spz').value,
-                model: document.getElementById('model'].value,
+                model: document.getElementById('model').value,
                 status: document.getElementById('status').value,
                 phone: document.getElementById('phone').value,
                 note: document.getElementById('note').value,
