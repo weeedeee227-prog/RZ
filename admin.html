@@ -3,203 +3,231 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pofel Garage - Administrace</title>
+    <!-- Zákaz cachování, aby aplikace neměla přístup k předchozím verzím -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>P&R MONT - Administrace mechaniků</title>
     <style>
         * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 8px; color: #333; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 12px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 100%; }
-        h1 { font-size: 20px; text-align: center; margin: 5px 0 15px 0; }
-        h2 { font-size: 16px; margin-top: 0; color: #444; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 16px; color: #333; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { font-size: 20px; text-align: center; margin-top: 0; color: #0066cc; }
+        .hidden { display: none !important; }
         
-        .form-container { background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e1e4e8; }
-        .form-group { margin-bottom: 10px; }
-        label { display: block; margin-bottom: 3px; font-weight: 600; font-size: 13px; color: #555; }
-        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; background: #fff; }
-        
+        .form-group { margin-bottom: 12px; }
+        label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 13px; color: #555; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; }
         .btn { background: #0066cc; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; font-weight: bold; text-align: center; display: inline-block; text-decoration: none; }
         .btn:active { background: #004d99; }
         
-        .car-list { display: flex; flex-direction: column; gap: 10px; }
-        .car-card { background: #fff; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .car-header { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #fafafa; cursor: pointer; }
-        .car-spz { font-size: 17px; font-weight: bold; color: #0066cc; }
-        .car-model { font-size: 15px; font-weight: 600; }
-        .car-arrow { font-size: 14px; color: #888; transition: transform 0.2s; }
-        .car-body { display: none; padding: 12px; border-top: 1px solid #eee; }
-        .car-card.expanded .car-body { display: block; }
-        .car-card.expanded .car-arrow { transform: rotate(180deg); }
+        /* Karty vozidel */
+        .card-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
+        .car-card { background: #fafafa; border: 1px solid #d1d5db; border-radius: 8px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .car-header { display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: bold; color: #0066cc; margin-bottom: 8px; }
         .car-row { font-size: 13px; margin-bottom: 6px; }
-        .car-meta { font-size: 11px; color: #666; background: #f9fafb; padding: 8px; border-radius: 4px; margin-top: 8px; display: flex; justify-content: space-between; }
         
-        .card-actions { display: flex; gap: 8px; margin-top: 12px; }
-        .btn-action { padding: 10px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold; flex: 1; cursor: pointer; }
-        .btn-edit { background: #ffc107; color: #000; }
-        .btn-delete { background: #dc3545; color: #fff; }
-        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .logout-btn { background: #6c757d; color: white; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+        /* Akční tlačítka v kartě */
+        .card-actions-row { display: flex; gap: 6px; margin-top: 10px; }
+        .btn-call { background: #28a745; color: white; padding: 8px; border-radius: 6px; text-align: center; text-decoration: none; flex: 1; font-weight: bold; font-size: 12px; }
+        .btn-sms { background: #17a2b8; color: white; padding: 8px; border-radius: 6px; text-align: center; text-decoration: none; flex: 1; font-weight: bold; font-size: 12px; }
+        .btn-edit { background: #ffc107; color: #000; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; font-size: 12px; }
+        .btn-delete { background: #dc3545; color: #fff; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; font-size: 12px; }
 
-        /* Styl pro vyskakovací okno */
-        #notifyModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; }
-        .modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center; }
+        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 13px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="top-nav">
-        <a href="/" class="logout-btn">← Hlavní stránka</a>
-        <span id="formModeIndicator" style="font-size: 12px; color: #666; font-weight: bold;">Režim: Přidání</span>
-    </div>
-    
-    <h1>Pofel Garage Admin</h1>
-
-    <div class="form-container">
-        <h2 id="formTitle">Přidat vozidlo</h2>
-        <form id="vehicleForm">
-            <div class="form-group">
-                <label for="spz">SPZ:</label>
-                <input type="text" id="spz" required style="text-transform: uppercase;">
-            </div>
-            <div class="form-group">
-                <label for="model">Model vozidla:</label>
-                <input type="text" id="model" required>
-            </div>
-            <div class="form-group">
-                <label for="phone">Telefon na zákazníka (volitelné):</label>
-                <input type="tel" id="phone" placeholder="+420 123 456 789">
-            </div>
-            <div class="form-group">
-                <label for="status">Stav opravy:</label>
-                <select id="status" required>
-                    <option value="Přijato do servisu">Přijato do servisu</option>
-                    <option value="Probíhá oprava">Probíhá oprava</option>
-                    <option value="Čeká se na díly">Čeká se na díly</option>
-                    <option value="Opraveno - připraveno k vyzvednutí">Opraveno - připraveno k vyzvednutí</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="note">Poznámka:</label>
-                <textarea id="note" rows="2"></textarea>
-            </div>
-            <button type="submit" class="btn" id="submitBtn">Uložit vozidlo</button>
-        </form>
+    <!-- PŘIHLÁŠENÍ MECHANIKA (Vynuceno 2+2) -->
+    <div id="loginView">
+        <h1>P&R MONT - Mechanici</h1>
+        <p style="text-align: center; font-size: 13px; color: #666;">Zadejte své přihlašovací údaje ve formátu 2+2 (např. Petr Novák = <b>peno</b>)</p>
+        <div class="form-group">
+            <label>Přihlášení (2+2):</label>
+            <input type="text" id="loginInput" placeholder="např. jeno" maxlength="4" style="text-transform: lowercase; text-align: center; font-weight: bold; font-size: 18px;">
+        </div>
+        <button class="btn" onclick="processLogin()">Přihlásit se do administrace</button>
+        <a href="/" class="btn" style="background: #6c757d; margin-top: 10px; display: block;">← Zpět na zákaznický portál</a>
     </div>
 
-    <h2>Seznam vozidel</h2>
-    <div id="carListContainer" class="car-list"></div>
-</div>
+    <!-- ADMINISTRACE (Po přihlášení) -->
+    <div id="mechanicView" class="hidden">
+        <div class="top-nav">
+            <span>Mechanik: <strong id="loggedUserDisplay"></strong></span>
+            <a href="#" onclick="logout()" style="color: #dc3545; font-weight: bold;">Odhlásit</a>
+        </div>
+        <h1>Správa zakázek</h1>
 
-<!-- Modalní okno po dokončení opravy -->
-<div id="notifyModal">
-    <div class="modal-content">
-        <h3 style="margin-top:0; color:#28a745;">✅ Auto je hotové!</h3>
-        <p style="font-size: 14px; margin-bottom: 20px;">Chcete dát zákazníkovi vědět?</p>
-        <a id="btnCall" href="#" class="btn" style="background: #28a745; margin-bottom: 10px;">📞 Zavolat</a>
-        <a id="btnSms" href="#" class="btn" style="background: #0066cc; margin-bottom: 15px;">💬 Poslat SMS</a>
-        <button onclick="document.getElementById('notifyModal').style.display='none'" class="btn" style="background: #6c757d;">Zavřít</button>
+        <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; border: 1px solid #e1e4e8; margin-bottom: 20px;">
+            <h3 id="formTitle" style="margin-top:0; font-size:15px;">Přidat vozidlo</h3>
+            <form id="vehicleForm" onsubmit="saveVehicle(event)">
+                <div class="form-group">
+                    <label>SPZ:</label>
+                    <input type="text" id="spz" required style="text-transform: uppercase;">
+                </div>
+                <div class="form-group">
+                    <label>Model vozidla:</label>
+                    <input type="text" id="model" required>
+                </div>
+                <div class="form-group">
+                    <label>Telefon na zákazníka (povinné):</label>
+                    <input type="tel" id="phone" required placeholder="+420 123 456 789">
+                </div>
+                <div class="form-group">
+                    <label>Stav opravy:</label>
+                    <select id="status" required>
+                        <option value="Přijato do servisu">Přijato do servisu</option>
+                        <option value="Probíhá oprava">Probíhá oprava</option>
+                        <option value="Čeká se na díly">Čeká se na díly</option>
+                        <option value="Opraveno - připraveno k vyzvednutí">Opraveno - připraveno k vyzvednutí</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Poznámka:</label>
+                    <textarea id="note" rows="2"></textarea>
+                </div>
+                <button type="submit" class="btn">Uložit do karet</button>
+            </form>
+        </div>
+
+        <h3>Seznam vozidel v kartách</h3>
+        <div id="mechanicCardList" class="card-list"></div>
     </div>
 </div>
 
 <script>
-    function loadVehicles() {
-        fetch('/api/admin/vehicles')
-            .then(res => res.json())
-            .then(cars => {
-                const container = document.getElementById('carListContainer');
-                container.innerHTML = cars.length === 0 ? '<p>Žádná vozidla.</p>' : '';
-                
-                cars.forEach(car => {
-                    const safeModel = (car.model || '').replace(/'/g, "\\'");
-                    const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
-                    const safePhone = (car.phone || '').replace(/'/g, "\\'");
+    let currentUser = '';
+    let allVehicles = [];
 
-                    container.innerHTML += `
-                        <div class="car-card" id="card-${car.id}">
-                            <div class="car-header" onclick="toggleCard(${car.id})">
-                                <div><span class="car-spz">${car.spz}</span><span class="car-model" style="margin-left: 8px;">${car.model}</span></div>
-                                <span class="car-arrow">▼</span>
-                            </div>
-                            <div class="car-body">
-                                <div class="car-row"><strong>Stav:</strong> <span style="color:#0066cc;">${car.status}</span></div>
-                                ${car.phone ? `<div class="car-row"><strong>Telefon:</strong> <a href="tel:${car.phone}">${car.phone}</a></div>` : ''}
-                                <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
-                                <div class="car-meta">
-                                    <div>Zapsal: <strong>${car.created_by || '-'}</strong></div>
-                                    <div>Upravil: <strong>${car.updated_by || '-'}</strong></div>
-                                </div>
-                                <div class="card-actions">
-                                    <button class="btn-action btn-edit" onclick="prepareEdit('${car.spz}', '${safeModel}', '${car.status}', '${safeNote}', '${safePhone}')">Upravit</button>
-                                    <button class="btn-action btn-delete" onclick="deleteCar(${car.id})">Smazat</button>
-                                </div>
-                            </div>
-                        </div>`;
-                });
+    function processLogin() {
+        const val = document.getElementById('loginInput').value.trim().toLowerCase();
+        if (val.length !== 4) {
+            alert('Zadejte prosím přesně 4 znaky ve formátu 2+2 (např. jeno).');
+            return;
+        }
+        currentUser = val;
+        document.getElementById('loggedUserDisplay').innerText = currentUser;
+        document.getElementById('loginView').classList.add('hidden');
+        document.getElementById('mechanicView').classList.remove('hidden');
+        loadData();
+    }
+
+    function logout() {
+        location.reload();
+    }
+
+    function loadData() {
+        fetch('/api/vehicles')
+            .then(res => res.json())
+            .then(data => {
+                allVehicles = data;
+                renderMechanicCards();
             });
     }
 
-    function toggleCard(id) { document.getElementById(`card-${id}`).classList.toggle('expanded'); }
-
-    function prepareEdit(spz, model, status, note, phone) {
-        document.getElementById('spz').value = spz;
-        document.getElementById('model').value = model;
-        document.getElementById('status').value = status;
-        document.getElementById('note').value = note === '-' ? '' : note;
-        document.getElementById('phone').value = phone || '';
-        
-        document.getElementById('formTitle').innerText = 'Upravit vozidlo (' + spz + ')';
-        document.getElementById('formModeIndicator').innerText = 'Režim: Úprava';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    function triggerNotifyModal(phone, spz) {
-        const modal = document.getElementById('notifyModal');
-        const msg = `Dobry den, Vase vozidlo (${spz}) je opraveno a pripraveno k vyzvednuti. Pofel Garage`;
-        
-        // Android i iOS podpora pro SMS (iOS občas zlobí s ?, takže & je pojistka)
-        const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? '&' : '?';
-        
-        document.getElementById('btnCall').href = `tel:${phone}`;
-        document.getElementById('btnSms').href = `sms:${phone}${separator}body=${encodeURIComponent(msg)}`;
-        
-        modal.style.display = 'flex';
-    }
-
-    document.getElementById('vehicleForm').addEventListener('submit', function(e) {
+    function saveVehicle(e) {
         e.preventDefault();
         const data = {
             spz: document.getElementById('spz').value.trim(),
             model: document.getElementById('model').value.trim(),
             phone: document.getElementById('phone').value.trim(),
             status: document.getElementById('status').value,
-            note: document.getElementById('note').value.trim()
+            note: document.getElementById('note').value.trim(),
+            user: currentUser
         };
 
-        fetch('/api/admin/vehicles', {
+        if (!data.phone) {
+            alert('Telefonní číslo zákazníka je povinné!');
+            return;
+        }
+
+        fetch('/api/vehicles', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         })
         .then(res => res.json())
-        .then(result => {
-            if (result.message) {
-                // Zkontrolujeme, jestli je auto hotové a má telefon
-                if (data.status === 'Opraveno - připraveno k vyzvednutí' && data.phone !== '') {
-                    triggerNotifyModal(data.phone, data.spz);
-                }
-                document.getElementById('vehicleForm').reset();
-                document.getElementById('formTitle').innerText = 'Přidat vozidlo';
-                document.getElementById('formModeIndicator').innerText = 'Režim: Přidání';
-                loadVehicles();
+        .then(res => {
+            if (res.error) {
+                alert(res.error);
+                return;
             }
+            triggerAppNotification(data.spz, data.status);
+            document.getElementById('vehicleForm').reset();
+            loadData();
         });
-    });
-
-    function deleteCar(id) {
-        if (!confirm('Smazat?')) return;
-        fetch('/api/admin/vehicles/' + id, { method: 'DELETE' }).then(() => loadVehicles());
     }
 
-    loadVehicles();
+    function triggerAppNotification(spz, status) {
+        if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("P&R MONT - Změna", {
+                body: `Vozidlo ${spz} - ${status}`
+            });
+        } else if ("Notification" in window && Notification.permission !== "denied") {
+            Notification.requestPermission().then(permission => {
+                if (permission === "granted") {
+                    new Notification("P&R MONT - Změna", {
+                        body: `Vozidlo ${spz} - ${status}`
+                    });
+                }
+            });
+        }
+    }
+
+    function renderMechanicCards() {
+        const container = document.getElementById('mechanicCardList');
+        if (allVehicles.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:#888;">Žádná vozidla v databance.</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        allVehicles.forEach(car => {
+            const smsText = encodeURIComponent(`Dobrý den, vaše vozidlo (${car.spz}) v P&R MONT. Stav: ${car.status}`);
+            const safeModel = (car.model || '').replace(/'/g, "\\'");
+            const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
+            
+            container.innerHTML += `
+                <div class="car-card">
+                    <div class="car-header">
+                        <span>${car.spz}</span>
+                        <span style="font-size: 13px; color: #555; font-weight: normal;">${car.model}</span>
+                    </div>
+                    <div class="car-row"><strong>Stav:</strong> <span style="color:#0066cc;">${car.status}</span></div>
+                    <div class="car-row"><strong>Telefon:</strong> <a href="tel:${car.phone}">${car.phone}</a></div>
+                    <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
+                    <div class="car-row" style="font-size: 11px; color: #888; margin-top: 4px;">Uložil/Upravil: ${car.updated_by || '-'}</div>
+                    
+                    <div class="card-actions-row">
+                        <a href="tel:${car.phone}" class="btn-call">📞 Zavolat</a>
+                        <a href="sms:${car.phone}?body=${smsText}" class="btn-sms">💬 SMS</a>
+                        <button class="btn-edit" onclick="editCar('${car.spz}', '${safeModel}', '${car.status}', '${safeNote}', '${car.phone}')">Upravit</button>
+                        <button class="btn-delete" onclick="deleteCar(${car.id})">Smazat</button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    function editCar(spz, model, status, note, phone) {
+        document.getElementById('spz').value = spz;
+        document.getElementById('model').value = model;
+        document.getElementById('status').value = status;
+        document.getElementById('note').value = note === '-' ? '' : note;
+        document.getElementById('phone').value = phone;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteCar(id) {
+        if (!confirm('Opravdu smazat vozidlo?')) return;
+        fetch('/api/vehicles/' + id, { method: 'DELETE' }).then(() => loadData());
+    }
+
+    if ("Notification" in window && Notification.permission !== "granted") {
+        Notification.requestPermission();
+    }
 </script>
 </body>
 </html>
