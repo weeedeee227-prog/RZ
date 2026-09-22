@@ -12,27 +12,60 @@ const db = new sqlite3.Database('./servis.db', (err) => {
     else console.log('Připojeno k SQLite databázi.');
 });
 
-// Vytvoření tabulky pro vozidla
-db.run(`CREATE TABLE IF NOT EXISTS vehicles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    spz TEXT UNIQUE NOT NULL,
-    model TEXT NOT NULL,
-    status TEXT NOT NULL,
-    note TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)`);
+// Vytvoření tabulek pro vozidla a uživatele
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS vehicles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        spz TEXT UNIQUE NOT NULL,
+        model TEXT NOT NULL,
+        status TEXT NOT NULL,
+        note TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
 
-// Stránka pro zákazníka (index.html)
+    db.run(`CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        password TEXT NOT NULL
+    )`, () => {
+        // Vložení nebo aktualizace obou uživatelů při startu
+        const defaultUsers = [
+            ['StepanSigmund', '62612Alfa'],
+            ['DenisLiulic', 'pofelsibro3103']
+        ];
+        
+        const stmt = db.prepare(`INSERT OR REPLACE INTO users (username, password) VALUES (?, ?)`);
+        defaultUsers.forEach(user => stmt.run(user));
+        stmt.finalize();
+    });
+});
+
+// Middleware pro ověření uživatele podle databáze
+function checkAuth(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        res.setHeader('WWW-Authenticate', 'Basic realm="Zabezpečená administrace servisu"');
+        return res.status(401).json({ error: 'Neautorizovaný přístup' });
+    }
+
+    const auth = Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(':');
+    const username = auth[0];
+    const password = auth[1];
+
+    db.get(`SELECT * FROM users WHERE username = ? AND password = ?`, [username, password], (err, row) => {
+        if (err || !row) {
+            res.setHeader('WWW-Authenticate', 'Basic realm="Zabezpečená administrace servisu"');
+            return res.status(401).json({ error: 'Nesprávné jméno nebo heslo' });
+        }
+        next();
+    });
+}
+
+// Stránka pro zákazníka (index.html) - veřejná
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Skrytá stránka pro mechaniky (admin.html)
-app.get('/admin.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin.html'));
-});
-
-// 1. ZÁKAZNÍK: Vyhledání stavu podle SPZ
+// Zákaznické API pro vyhledávání stavu podle SPZ - veřejné
 app.get('/api/status/:spz', (req, res) => {
     const spz = req.params.spz.replace(/\s+/g, '').toUpperCase();
 
@@ -43,16 +76,22 @@ app.get('/api/status/:spz', (req, res) => {
     });
 });
 
-// 2. SERVIS: Získání všech vozidel
-app.get('/api/admin/vehicles', (req, res) => {
+// ==========================================
+// ZABEZPEČENÉ ADMIN ROUTY (Vyžadují přihlášení)
+// ==========================================
+
+app.get('/admin.html', checkAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+app.get('/api/admin/vehicles', checkAuth, (req, res) => {
     db.all(`SELECT * FROM vehicles ORDER BY updated_at DESC`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: 'Chyba databáze' });
         res.json(rows);
     });
 });
 
-// 3. SERVIS: Přidání nebo aktualizace vozidla
-app.post('/api/admin/vehicles', (req, res) => {
+app.post('/api/admin/vehicles', checkAuth, (req, res) => {
     const { spz, model, status, note } = req.body;
     if (!spz || !model || !status) {
         return res.status(400).json({ error: 'Vyplňte SPZ, model a stav.' });
@@ -74,8 +113,7 @@ app.post('/api/admin/vehicles', (req, res) => {
     });
 });
 
-// 4. SERVIS: Smazání vozidla
-app.delete('/api/admin/vehicles/:id', (req, res) => {
+app.delete('/api/admin/vehicles/:id', checkAuth, (req, res) => {
     db.run(`DELETE FROM vehicles WHERE id = ?`, [req.params.id], function(err) {
         if (err) return res.status(500).json({ error: 'Chyba při mazání' });
         res.json({ message: 'Smazáno' });
