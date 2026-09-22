@@ -68,7 +68,7 @@
             </div>
             <div class="form-group">
                 <label for="phone">Telefon na zákazníka (nepovinné):</label>
-                <input type="tel" id="phone" placeholder="+420 123 456 789">
+                <input type="tel" id="phone" placeholder="603123456">
             </div>
             <div class="form-group">
                 <label for="status">Stav opravy:</label>
@@ -91,7 +91,7 @@
     <div id="carListContainer" class="car-list"></div>
 
     <div style="text-align: center; margin-top: 25px; margin-bottom: 10px;">
-        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v1.4</span>
+        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v1.6</span>
     </div>
 </div>
 
@@ -107,14 +107,37 @@
 
 <script>
     function forceUpdateApp() {
-        // Pouze zrušíme registraci Service Workera v prohlížeči, data na serveru zůstanou naprosto v bezpečí
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(registrations => {
                 for (let reg of registrations) { reg.unregister(); }
             });
         }
-        alert('Mezipaměť aplikace vyčištěna. Načítám nejnovější verzi v1.4...');
+        alert('Mezipaměť aplikace vyčištěna. Načítám nejnovější verzi v1.6...');
         window.location.reload(true);
+    }
+
+    // Automatické doplnění +420 při odeslání
+    function formatPhoneNumber(rawPhone) {
+        if (!rawPhone) return '';
+        let cleaned = rawPhone.replace(/\s+/g, '').trim();
+        if (cleaned === '') return '';
+        
+        if (cleaned.startsWith('+')) {
+            return cleaned;
+        }
+        if (/^\d{9}$/.test(cleaned)) {
+            return '+420' + cleaned;
+        }
+        return cleaned;
+    }
+
+    // Odstranění +420 při vkládání do formuláře pro úpravy, aby uživatel viděl čisté číslo
+    function cleanPhoneForInput(phone) {
+        if (!phone || phone === 'undefined') return '';
+        if (phone.startsWith('+420')) {
+            return phone.substring(4);
+        }
+        return phone;
     }
 
     function loadVehicles() {
@@ -160,7 +183,7 @@
         document.getElementById('model').value = model;
         document.getElementById('status').value = status;
         document.getElementById('note').value = note === '-' ? '' : note;
-        document.getElementById('phone').value = (phone && phone !== 'undefined') ? phone : '';
+        document.getElementById('phone').value = cleanPhoneForInput(phone);
         
         document.getElementById('formTitle').innerText = 'Upravit vozidlo (' + spz + ')';
         document.getElementById('formModeIndicator').innerText = 'Režim: Úprava';
@@ -180,10 +203,14 @@
 
     document.getElementById('vehicleForm').addEventListener('submit', function(e) {
         e.preventDefault();
+        
+        const rawPhone = document.getElementById('phone').value;
+        const formattedPhone = formatPhoneNumber(rawPhone);
+
         const data = {
             spz: document.getElementById('spz').value.trim(),
             model: document.getElementById('model').value.trim(),
-            phone: document.getElementById('phone').value.trim(),
+            phone: formattedPhone,
             status: document.getElementById('status').value,
             note: document.getElementById('note').value.trim()
         };
@@ -199,7 +226,7 @@
                 if (data.status === 'Opraveno - připraveno k vyzvednutí' && data.phone !== '') {
                     triggerNotifyModal(data.phone, data.spz, data.model);
                 }
-                document.getElementById('vehicleForm'].reset();
+                document.getElementById('vehicleForm').reset();
                 document.getElementById('formTitle').innerText = 'Přidat vozidlo';
                 document.getElementById('formModeIndicator').innerText = 'Režim: Přidání';
                 loadVehicles();
