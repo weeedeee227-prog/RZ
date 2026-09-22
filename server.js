@@ -181,7 +181,7 @@ app.get('/api/admin/vehicles', checkAuth, (req, res) => {
 
 // Administrační API - přidání nebo aktualizace vozidla
 app.post('/api/admin/vehicles', checkAuth, (req, res) => {
-    let { spz, model, status, note } = req.body;
+    let { spz, model, status, phone, note } = req.body;
     if (!spz || !model || !status) {
         return res.status(400).json({ error: 'Vyplňte povinná pole (SPZ, model, stav).' });
     }
@@ -202,17 +202,17 @@ app.post('/api/admin/vehicles', checkAuth, (req, res) => {
                 SET model = ?, status = ?, note = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP 
                 WHERE spz = ?
             `;
-            db.run(updateQuery, [model, status, note, currentUserFormatted, spz], function(err) {
+            db.run(updateQuery, [model, status, phone, note, currentUserFormatted, spz], function(err) {
                 if (err) return res.status(500).json({ error: err.message });
                 res.json({ message: 'Vozidlo úspěšně aktualizováno.' });
             });
         } else {
             // Vozidlo neexistuje -> Vytvoříme nové (zapisuje se created_by i updated_by)
             const insertQuery = `
-                INSERT INTO vehicles (spz, model, status, note, created_by, updated_by, updated_at) 
+                INSERT INTO vehicles (spz, model, status, phone, note, created_by, updated_by, updated_at) 
                 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             `;
-            db.run(insertQuery, [spz, model, status, note, currentUserFormatted, currentUserFormatted], function(err) {
+            db.run(insertQuery, [spz, model, status, phone, note, currentUserFormatted, currentUserFormatted], function(err) {
                 if (err) return res.status(500).json({ error: err.message });
                 res.json({ message: 'Vozidlo úspěšně přidáno.' });
             });
