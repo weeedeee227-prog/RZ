@@ -14,7 +14,7 @@ const db = new sqlite3.Database('./servis.db', (err) => {
     else console.log('Připojeno k SQLite databázi.');
 });
 
-// Vytvoření tabulek s novými sloupci pro logování uživatelů
+// Vytvoření tabulek a bezpečné přidání sloupců pro logování
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS vehicles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,10 +22,12 @@ db.serialize(() => {
         model TEXT NOT NULL,
         status TEXT NOT NULL,
         note TEXT,
-        created_by TEXT,
-        updated_by TEXT,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    // Bezpečné přidání nových sloupců do existující tabulky
+    db.run(`ALTER TABLE vehicles ADD COLUMN created_by TEXT`, (err) => {});
+    db.run(`ALTER TABLE vehicles ADD COLUMN updated_by TEXT`, (err) => {});
 
     db.run(`CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY,
@@ -77,6 +79,7 @@ function requireLogin(req, res, next) {
     next();
 }
 
+// Zpracování přihlášení
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
     db.get(`SELECT * FROM users WHERE username = ? AND password = ?`, [username, password], (err, row) => {
@@ -104,7 +107,7 @@ app.get('/api/admin/vehicles', requireLogin, (req, res) => {
 
 app.post('/api/admin/vehicles', requireLogin, (req, res) => {
     const { spz, model, status, note } = req.body;
-    const currentUser = req.cookies.logged_user; // Kdo akci provádí
+    const currentUser = req.cookies.logged_user;
 
     if (!spz || !model || !status) {
         return res.status(400).json({ error: 'Vyplňte SPZ, model a stav.' });
@@ -112,7 +115,6 @@ app.post('/api/admin/vehicles', requireLogin, (req, res) => {
 
     const cleanSpz = spz.trim().toUpperCase();
 
-    // Nejprve zjistíme, jestli vozidlo už existuje, abychom zachovali původního tvůrce (created_by)
     db.get(`SELECT created_by FROM vehicles WHERE spz = ?`, [cleanSpz], (err, existingRow) => {
         if (err) return res.status(500).json({ error: 'Chyba databáze' });
 
@@ -128,7 +130,7 @@ app.post('/api/admin/vehicles', requireLogin, (req, res) => {
                         updated_at = CURRENT_TIMESTAMP`;
 
         db.run(sql, [cleanSpz, model, status, note || '', creator, currentUser], function(err) {
-            if (err) return res.status(500).json({ error: 'Chyba při ukládání' });
+            if (err) return res.status(500).json({ error: 'Chyba při ukládání: ' + err.message });
             res.json({ message: 'Uloženo úspěšně' });
         });
     });
