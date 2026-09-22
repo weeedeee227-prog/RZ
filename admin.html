@@ -4,13 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pofel Garage - Administrace</title>
-    <link rel="icon" type="image/png" href="/favicon.png">
-    <link rel="manifest" href="/manifest.json">
     <style>
         * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 8px; color: #333; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 8px; color: #333; }
         .container { max-width: 600px; margin: auto; background: white; padding: 12px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 100%; }
-        h1 { font-size: 20px; text-align: center; margin: 5px 0 15px 0; color: #1a1a1a; }
+        h1 { font-size: 20px; text-align: center; margin: 5px 0 15px 0; }
         h2 { font-size: 16px; margin-top: 0; color: #444; }
         
         .form-container { background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e1e4e8; }
@@ -18,34 +16,30 @@
         label { display: block; margin-bottom: 3px; font-weight: 600; font-size: 13px; color: #555; }
         input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; background: #fff; }
         
-        .btn { background: #0066cc; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; font-weight: bold; text-align: center; }
+        .btn { background: #0066cc; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; font-weight: bold; text-align: center; display: inline-block; text-decoration: none; }
         .btn:active { background: #004d99; }
         
         .car-list { display: flex; flex-direction: column; gap: 10px; }
-        
-        /* Rozbalovací karty */
-        .car-card { background: #fff; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: all 0.2s ease; }
-        .car-header { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #fafafa; cursor: pointer; user-select: none; }
-        .car-header:active { background: #f0f2f5; }
+        .car-card { background: #fff; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .car-header { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #fafafa; cursor: pointer; }
         .car-spz { font-size: 17px; font-weight: bold; color: #0066cc; }
-        .car-model { font-size: 15px; font-weight: 600; color: #222; }
+        .car-model { font-size: 15px; font-weight: 600; }
         .car-arrow { font-size: 14px; color: #888; transition: transform 0.2s; }
-        
-        /* Skrytý obsah, který se po kliknutí rozbalí */
-        .car-body { display: none; padding: 12px; border-top: 1px solid #eee; background: #fff; }
+        .car-body { display: none; padding: 12px; border-top: 1px solid #eee; }
         .car-card.expanded .car-body { display: block; }
         .car-card.expanded .car-arrow { transform: rotate(180deg); }
-
         .car-row { font-size: 13px; margin-bottom: 6px; }
         .car-meta { font-size: 11px; color: #666; background: #f9fafb; padding: 8px; border-radius: 4px; margin-top: 8px; display: flex; justify-content: space-between; }
         
         .card-actions { display: flex; gap: 8px; margin-top: 12px; }
-        .btn-action { padding: 10px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold; flex: 1; text-align: center; cursor: pointer; }
+        .btn-action { padding: 10px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold; flex: 1; cursor: pointer; }
         .btn-edit { background: #ffc107; color: #000; }
         .btn-delete { background: #dc3545; color: #fff; }
-        
         .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .logout-btn { background: #6c757d; color: white; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+
+        #notifyModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center; }
     </style>
 </head>
 <body>
@@ -58,17 +52,20 @@
     
     <h1>Pofel Garage Admin</h1>
 
-    <!-- Formulář -->
     <div class="form-container">
-        <h2 id="formTitle">Přidat nové vozidlo</h2>
+        <h2 id="formTitle">Přidat vozidlo</h2>
         <form id="vehicleForm">
             <div class="form-group">
                 <label for="spz">SPZ:</label>
-                <input type="text" id="spz" required placeholder="např. 1B23456" style="text-transform: uppercase;">
+                <input type="text" id="spz" required style="text-transform: uppercase;">
             </div>
             <div class="form-group">
                 <label for="model">Model vozidla:</label>
-                <input type="text" id="model" required placeholder="např. Škoda Octavia">
+                <input type="text" id="model" required>
+            </div>
+            <div class="form-group">
+                <label for="phone">Telefon na zákazníka (nepovinné):</label>
+                <input type="tel" id="phone" placeholder="+420 123 456 789">
             </div>
             <div class="form-group">
                 <label for="status">Stav opravy:</label>
@@ -81,16 +78,23 @@
             </div>
             <div class="form-group">
                 <label for="note">Poznámka:</label>
-                <textarea id="note" rows="2" placeholder="Detaily opravy..."></textarea>
+                <textarea id="note" rows="2"></textarea>
             </div>
             <button type="submit" class="btn" id="submitBtn">Uložit vozidlo</button>
         </form>
     </div>
 
-    <!-- Seznam -->
     <h2>Seznam vozidel</h2>
-    <div id="carListContainer" class="car-list">
-        <!-- Načítá se přes JS -->
+    <div id="carListContainer" class="car-list"></div>
+</div>
+
+<div id="notifyModal">
+    <div class="modal-content">
+        <h3 style="margin-top:0; color:#28a745;">✅ Auto je hotové!</h3>
+        <p style="font-size: 14px; margin-bottom: 20px;">Chcete dát zákazníkovi vědět?</p>
+        <a id="btnCall" href="#" class="btn" style="background: #28a745; margin-bottom: 10px;">📞 Zavolat</a>
+        <a id="btnSms" href="#" class="btn" style="background: #0066cc; margin-bottom: 15px;">💬 Poslat SMS</a>
+        <button onclick="document.getElementById('notifyModal').style.display='none'" class="btn" style="background: #6c757d;">Zavřít</button>
     </div>
 </div>
 
@@ -100,71 +104,68 @@
             .then(res => res.json())
             .then(cars => {
                 const container = document.getElementById('carListContainer');
-                container.innerHTML = '';
+                container.innerHTML = cars.length === 0 ? '<p>Žádná vozidla.</p>' : '';
                 
-                if (cars.length === 0) {
-                    container.innerHTML = `<p style="text-align: center; color: #777; font-size: 14px;">Žádná vozidla v databázi.</p>`;
-                    return;
-                }
-
                 cars.forEach(car => {
                     const safeModel = (car.model || '').replace(/'/g, "\\'");
                     const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
+                    const safePhone = (car.phone || '').replace(/'/g, "\\'");
 
                     container.innerHTML += `
                         <div class="car-card" id="card-${car.id}">
                             <div class="car-header" onclick="toggleCard(${car.id})">
-                                <div>
-                                    <span class="car-spz">${car.spz}</span>
-                                    <span class="car-model" style="margin-left: 8px;">${car.model}</span>
-                                </div>
+                                <div><span class="car-spz">${car.spz}</span><span class="car-model" style="margin-left: 8px;">${car.model}</span></div>
                                 <span class="car-arrow">▼</span>
                             </div>
                             <div class="car-body">
-                                <div class="car-row"><strong>Stav:</strong> <span style="color: #0066cc;">${car.status}</span></div>
+                                <div class="car-row"><strong>Stav:</strong> <span style="color:#0066cc;">${car.status}</span></div>
+                                ${car.phone ? `<div class="car-row"><strong>Telefon:</strong> <a href="tel:${car.phone}">${car.phone}</a></div>` : ''}
                                 <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
                                 <div class="car-meta">
                                     <div>Zapsal: <strong>${car.created_by || '-'}</strong></div>
                                     <div>Upravil: <strong>${car.updated_by || '-'}</strong></div>
                                 </div>
                                 <div class="card-actions">
-                                    <button class="btn-action btn-edit" onclick="prepareEdit('${car.spz}', '${safeModel}', '${car.status}', '${safeNote}')">Upravit</button>
+                                    <button class="btn-action btn-edit" onclick="prepareEdit('${car.spz}', '${safeModel}', '${car.status}', '${safeNote}', '${safePhone}')">Upravit</button>
                                     <button class="btn-action btn-delete" onclick="deleteCar(${car.id})">Smazat</button>
                                 </div>
                             </div>
-                        </div>
-                    `;
+                        </div>`;
                 });
-            })
-            .catch(err => console.error('Chyba:', err));
+            });
     }
 
-    // Funkce pro rozbalení/zabalení karty
-    function toggleCard(id) {
-        const card = document.getElementById(`card-${id}`);
-        card.classList.toggle('expanded');
-    }
+    function toggleCard(id) { document.getElementById(`card-${id}`).classList.toggle('expanded'); }
 
-    function prepareEdit(spz, model, status, note) {
+    function prepareEdit(spz, model, status, note, phone) {
         document.getElementById('spz').value = spz;
         document.getElementById('model').value = model;
         document.getElementById('status').value = status;
         document.getElementById('note').value = note === '-' ? '' : note;
+        document.getElementById('phone').value = phone || '';
         
         document.getElementById('formTitle').innerText = 'Upravit vozidlo (' + spz + ')';
-        document.getElementById('submitBtn').innerText = 'Aktualizovat vozidlo';
         document.getElementById('formModeIndicator').innerText = 'Režim: Úprava';
-        document.getElementById('formModeIndicator').style.color = '#d97706';
-        
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function triggerNotifyModal(phone, spz, model) {
+        const modal = document.getElementById('notifyModal');
+        const msg = `Dobrý den, Vaše vozidlo ${spz} (${model}) je připraveno k vyzvednutí. Pofel Garage`;
+        const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? '&' : '?';
+        
+        document.getElementById('btnCall').href = `tel:${phone}`;
+        document.getElementById('btnSms').href = `sms:${phone}${separator}body=${encodeURIComponent(msg)}`;
+        
+        modal.style.display = 'flex';
     }
 
     document.getElementById('vehicleForm').addEventListener('submit', function(e) {
         e.preventDefault();
-
         const data = {
             spz: document.getElementById('spz').value.trim(),
             model: document.getElementById('model').value.trim(),
+            phone: document.getElementById('phone'].value.trim(),
             status: document.getElementById('status').value,
             note: document.getElementById('note').value.trim()
         };
@@ -177,34 +178,24 @@
         .then(res => res.json())
         .then(result => {
             if (result.message) {
+                if (data.status === 'Opraveno - připraveno k vyzvednutí' && data.phone !== '') {
+                    triggerNotifyModal(data.phone, data.spz, data.model);
+                }
                 document.getElementById('vehicleForm').reset();
-                document.getElementById('formTitle').innerText = 'Přidat nové vozidlo';
-                document.getElementById('submitBtn').innerText = 'Uložit vozidlo';
+                document.getElementById('formTitle').innerText = 'Přidat vozidlo';
                 document.getElementById('formModeIndicator').innerText = 'Režim: Přidání';
-                document.getElementById('formModeIndicator').style.color = '#666';
                 loadVehicles();
-            } else {
-                alert('Chyba: ' + (result.error || 'Neznámá chyba'));
             }
-        })
-        .catch(err => alert('Chyba při komunikaci se serverem.'));
+        });
     });
 
+    function deleteCard(id) {} // fix for typo if any
     function deleteCar(id) {
-        if (!confirm('Opravdu chcete toto vozidlo smazat?')) return;
-
-        fetch('/api/admin/vehicles/' + id, {
-            method: 'DELETE'
-        })
-        .then(res => res.json())
-        .then(result => {
-            loadVehicles();
-        })
-        .catch(err => alert('Chyba při mazání vozidla.'));
+        if (!confirm('Smazat?')) return;
+        fetch('/api/admin/vehicles/' + id, { method: 'DELETE' }).then(() => loadVehicles());
     }
 
     loadVehicles();
 </script>
-
 </body>
 </html>
