@@ -94,7 +94,7 @@
     <div id="carListContainer" class="car-list"></div>
 
     <div style="text-align: center; margin-top: 25px; margin-bottom: 10px;">
-        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v1.8</span>
+        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v2.0</span>
     </div>
 </div>
 
@@ -115,8 +115,7 @@
                 for (let reg of registrations) { reg.unregister(); }
             });
         }
-        alert('Mezipaměť aplikace vyčištěna. Načítám nejnovější verzi v1.8...');
-        window.location.reload(true);
+        window.location.reload();
     }
 
     function formatPhoneNumber(rawPhone) {
@@ -212,7 +211,7 @@
             spz: document.getElementById('spz').value.trim(),
             model: document.getElementById('model').value.trim(),
             phone: formattedPhone,
-            status: document.getElementById('status'].value,
+            status: document.getElementById('status').value,
             note: document.getElementById('note').value.trim()
         };
 
