@@ -1,6 +1,7 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
 const cookieParser = require('cookie-parser');
 
 const app = express();
@@ -8,10 +9,20 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// Cesta k databázovému souboru na disku
+const dbPath = path.join(__dirname, 'servis.db');
+const backupPath = path.join(__dirname, 'servis_backup.db');
+
+// Pokud máme zálohu z dřívějška a hlavní DB neexistuje, obnovíme ji
+if (!fs.existsSync(dbPath) && fs.existsSync(backupPath)) {
+    fs.copyFileSync(backupPath, dbPath);
+    console.log('Databáze byla obnovena ze zálohy na disku.');
+}
+
 // Připojení k SQLite databázi
-const db = new sqlite3.Database('./servis.db', (err) => {
+const db = new sqlite3.Database(dbPath, (err) => {
     if (err) console.error('Chyba při otevírání databáze:', err.message);
-    else console.log('Připojeno k SQLite databázi.');
+    else console.log('Připojeno k SQLite databázi na disku.');
 });
 
 // Vytvoření tabulek a bezpečné přidání sloupců pro logování
@@ -43,6 +54,21 @@ db.serialize(() => {
         stmt.finalize();
     });
 });
+
+// Funkce pro automatické uložení (zálohu) databáze na disk
+function ulozZalohu() {
+    try {
+        if (fs.existsSync(dbPath)) {
+            fs.copyFileSync(dbPath, backupPath);
+            console.log('Záloha databáze na disk byla úspěšně vytvořena.');
+        }
+    } catch (err) {
+        console.error('Chyba při zálohování databáze:', err.message);
+    }
+}
+
+// Zálohujeme databázi každou hodinu automaticky na pozadí
+setInterval(ulozZalohu, 60 * 60 * 1000);
 
 // Middleware pro kontrolu přihlášení
 function requireLogin(req, res, next) {
@@ -131,6 +157,10 @@ app.post('/api/admin/vehicles', requireLogin, (req, res) => {
 
         db.run(sql, [cleanSpz, model, status, note || '', creator, currentUser], function(err) {
             if (err) return res.status(500).json({ error: 'Chyba při ukládání: ' + err.message });
+            
+            // Okamžitě po uložení auta vytvoříme zálohu na disk
+            ulozZalohu();
+            
             res.json({ message: 'Uloženo úspěšně' });
         });
     });
@@ -139,6 +169,10 @@ app.post('/api/admin/vehicles', requireLogin, (req, res) => {
 app.delete('/api/admin/vehicles/:id', requireLogin, (req, res) => {
     db.run(`DELETE FROM vehicles WHERE id = ?`, [req.params.id], function(err) {
         if (err) return res.status(500).json({ error: 'Chyba při mazání' });
+        
+        // Záloha po smazání
+        ulozZalohu();
+        
         res.json({ message: 'Smazáno' });
     });
 });
