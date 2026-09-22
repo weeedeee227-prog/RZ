@@ -1,73 +1,165 @@
 <!DOCTYPE html>
 <html lang="cs">
-<head> <link rel="icon" type="image/png" href="/favicon.png">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sledování stavu opravy vozidla</title>
+    <title>Pofel Garage - Administrace</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: 40px auto; }
-        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); text-align: center; }
-        h1 { color: #1a1a1a; margin-top: 0; }
-        .spz-input { font-size: 26px; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; text-align: center; border: 2px solid #ccc; border-radius: 8px; padding: 12px; width: 100%; box-sizing: border-box; margin-top: 15px; }
-        button { background: #0066cc; color: white; border: none; padding: 14px 20px; border-radius: 8px; font-size: 18px; cursor: pointer; width: 100%; margin-top: 15px; font-weight: bold; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1, h2 { color: #1a1a1a; text-align: center; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        button { background: #0066cc; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; font-weight: bold; }
         button:hover { background: #0052a3; }
-        .status-badge { display: inline-block; padding: 10px 20px; border-radius: 20px; font-weight: bold; font-size: 20px; margin-top: 10px; }
-        .status-Příjem { background: #e3f2fd; color: #0d47a1; }
-        .status-Diagnostika { background: #fff3e0; color: #e65100; }
-        .status-Oprava { background: #e8f5e9; color: #1b5e20; }
-        .status-Čekání\ na\ díly { background: #f3e5f5; color: #4a148c; }
-        .status-Hotovo { background: #4caf50; color: white; }
+        table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; font-size: 14px; }
+        th { background-color: #f8f9fa; color: #333; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .btn-delete { background: #dc3545; padding: 6px 12px; font-size: 12px; width: auto; }
+        .btn-delete:hover { background: #c82333; }
+        .logout-btn { background: #6c757d; margin-bottom: 20px; width: auto; display: inline-block; }
+        .logout-btn:hover { background: #5a6268; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="card">
-        <h1>🚗 Sledování stavu opravy</h1>
-        <p>Zadejte SPZ vašeho vozidla pro zjištění stavu:</p>
-        <input type="text" id="customer-spz" class="spz-input" placeholder="např. 1AB 2345" maxlength="10">
-        <button onclick="checkStatus()">Zjistit stav</button>
+    <a href="/" class="logout-btn" style="text-decoration: none; color: white; text-align: center;">← Zpět na hlavní stránku</a>
+    
+    <h1>Administrace servisu - Pofel Garage</h1>
 
-        <div id="status-result" style="display: none; margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px; text-align: left;">
-            <h2 id="res-model" style="margin-top: 0;"></h2>
-            <p><strong>SPZ:</strong> <span id="res-spz"></span></p>
-            <p><strong>Aktuální stav:</strong></p>
-            <div id="res-status" class="status-badge"></div>
-            <p style="margin-top: 20px;"><strong>Poznámka ze servisu:</strong> <br><span id="res-note"></span></p>
-            <small style="color: #666;">Naposledy aktualizováno: <span id="res-updated"></span></small>
-        </div>
+    <!-- Formulář pro přidání / úpravu vozidla -->
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 20px;">
+        <h2>Přidat / Upravit vozidlo</h2>
+        <form id="vehicleForm">
+            <div class="form-group">
+                <label for="spz">SPZ (Registrační značka):</label>
+                <input type="text" id="spz" required placeholder="např. 1B23456" style="text-transform: uppercase;">
+            </div>
+            <div class="form-group">
+                <label for="model">Model vozidla:</label>
+                <input type="text" id="model" required placeholder="např. Škoda Octavia">
+            </div>
+            <div class="form-group">
+                <label for="status">Stav opravy:</label>
+                <select id="status" required>
+                    <option value="Přijato do servisu">Přijato do servisu</option>
+                    <option value="Probíhá oprava">Probíhá oprava</option>
+                    <option value="Čeká se na díly">Čeká se na díly</option>
+                    <option value="Opraveno - připraveno k vyzvednutí">Opraveno - připraveno k vyzvednutí</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="note">Poznámka / Popis práce:</label>
+                <textarea id="note" rows="3" placeholder="Detaily opravy..."></textarea>
+            </div>
+            <button type="submit">Uložit vozidlo</button>
+        </form>
     </div>
+
+    <!-- Seznam vozidel -->
+    <h2>Seznam vozidel v databázi</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>SPZ</th>
+                <th>Model</th>
+                <th>Stav</th>
+                <th>Poznámka</th>
+                <th>Zapsal</th>
+                <th>Upravil</th>
+                <th>Poslední změna</th>
+                <th>Akce</th>
+            </tr>
+        </thead>
+        <tbody id="vehicleTableBody">
+            <!-- Sem JavaScript dynamicky natahuje data -->
+        </tbody>
+    </table>
 </div>
 
 <script>
-    async function checkStatus() {
-        const spz = document.getElementById('customer-spz').value;
-        if (!spz) return alert('Zadejte SPZ');
-
-        try {
-            const res = await fetch(`/api/status/${encodeURIComponent(spz)}`);
-            const data = await res.json();
-
-            if (res.ok) {
-                document.getElementById('res-model').innerText = data.model;
-                document.getElementById('res-spz').innerText = data.spz;
+    // Načtení seznamu vozidel při otevření stránky
+    function loadVehicles() {
+        fetch('/api/admin/vehicles')
+            .then(res => res.json())
+            .then(cars => {
+                const tbody = document.getElementById('vehicleTableBody');
+                tbody.innerHTML = '';
                 
-                const statusBadge = document.getElementById('res-status');
-                statusBadge.innerText = data.status;
-                statusBadge.className = `status-badge status-${data.status.replace(/\s+/g, '\\ ')}`;
+                if (cars.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #777;">Žádná vozidla v databázi.</td></tr>`;
+                    return;
+                }
 
-                document.getElementById('res-note').innerText = data.note || 'Bez poznámky';
-                document.getElementById('res-updated').innerText = new Date(data.updated_at).toLocaleString('cs-CZ');
-                document.getElementById('status-result').style.display = 'block';
-            } else {
-                alert(data.error);
-                document.getElementById('status-result').style.display = 'none';
-            }
-        } catch (err) {
-            alert('Chyba při komunikaci se serverem');
-        }
+                cars.forEach(car => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${car.spz}</strong></td>
+                            <td>${car.model}</td>
+                            <td>${car.status}</td>
+                            <td>${car.note || '-'}</td>
+                            <td><span style="color: #0066cc; font-weight: bold;">${car.created_by || '-'}</span></td>
+                            <td><span style="color: #28a745; font-weight: bold;">${car.updated_by || '-'}</span></td>
+                            <td>${car.updated_at || '-'}</td>
+                            <td>
+                                <button class="btn-delete" onclick="deleteCar(${car.id})">Smazat</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            })
+            .catch(err => console.error('Chyba při načítání vozidel:', err));
     }
+
+    // Odeslání formuláře pro uložení/aktualizaci
+    document.getElementById('vehicleForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const data = {
+            spz: document.getElementById('spz').value.trim(),
+            model: document.getElementById('model').value.trim(),
+            status: document.getElementById('status').value,
+            note: document.getElementById('note').value.trim()
+        };
+
+        fetch('/api/admin/vehicles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(result => {
+            if (result.message) {
+                alert('Vozidlo bylo úspěšně uloženo!');
+                document.getElementById('vehicleForm').reset();
+                loadVehicles();
+            } else {
+                alert('Chyba: ' + (result.error || 'Neznámá chyba'));
+            }
+        })
+        .catch(err => alert('Chyba při komunikaci se serverem.'));
+    });
+
+    // Smazání vozidla
+    function deleteCar(id) {
+        if (!confirm('Opravdu chcete toto vozidlo smazat?')) return;
+
+        fetch('/api/admin/vehicles/' + id, {
+            method: 'DELETE'
+        })
+        .then(res => res.json())
+        .then(result => {
+            loadVehicles();
+        })
+        .catch(err => alert('Chyba při mazání vozidla.'));
+    }
+
+    // Spustit načtení při startu
+    loadVehicles();
 </script>
 
 </body>
