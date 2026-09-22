@@ -46,7 +46,6 @@
 <body>
 
 <div class="container">
-    <!-- Horní lišta: Pouze tlačítko aktualizace vlevo -->
     <div class="top-nav">
         <button onclick="forceUpdateApp()" class="nav-btn update-btn">🔄 Aktualizovat</button>
     </div>
@@ -108,17 +107,13 @@
 
 <script>
     function forceUpdateApp() {
+        // Pouze zrušíme registraci Service Workera v prohlížeči, data na serveru zůstanou naprosto v bezpečí
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(registrations => {
                 for (let reg of registrations) { reg.unregister(); }
             });
         }
-        if ('caches' in window) {
-            caches.keys().then(names => {
-                for (let name of names) { caches.delete(name); }
-            });
-        }
-        alert('Mezipaměť vyčištěna. Načítám verzi v1.4...');
+        alert('Mezipaměť aplikace vyčištěna. Načítám nejnovější verzi v1.4...');
         window.location.reload(true);
     }
 
@@ -204,7 +199,7 @@
                 if (data.status === 'Opraveno - připraveno k vyzvednutí' && data.phone !== '') {
                     triggerNotifyModal(data.phone, data.spz, data.model);
                 }
-                document.getElementById('vehicleForm').reset();
+                document.getElementById('vehicleForm'].reset();
                 document.getElementById('formTitle').innerText = 'Přidat vozidlo';
                 document.getElementById('formModeIndicator').innerText = 'Režim: Přidání';
                 loadVehicles();
