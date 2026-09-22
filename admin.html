@@ -2,6 +2,11 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
+    <!-- Vynucení nekachování souboru prohlížečem -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="apple-touch-icon" href="/favicon.png">
@@ -87,7 +92,7 @@
     <div id="carListContainer" class="car-list"></div>
 
     <div style="text-align: center; margin-top: 25px; margin-bottom: 10px;">
-        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v2.3</span>
+        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v2.4</span>
     </div>
 </div>
 
@@ -102,6 +107,13 @@
 </div>
 
 <script>
+    // Úplné vymazání starých service workerů při startu
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+            for (let reg of registrations) { reg.unregister(); }
+        });
+    }
+
     function formatPhoneNumber(rawPhone) {
         if (!rawPhone) return '';
         let cleaned = rawPhone.replace(/\s+/g, '').trim();
@@ -124,7 +136,7 @@
     }
 
     function loadVehicles() {
-        fetch('/api/admin/vehicles')
+        fetch('/api/admin/vehicles?t=' + new Date().getTime())
             .then(res => res.json())
             .then(cars => {
                 const container = document.getElementById('carListContainer');
@@ -134,7 +146,6 @@
                     const safeModel = (car.model || '').replace(/'/g, "\\'");
                     const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
                     
-                    // Bezpečné ošetření telefonu, aby se nevykreslovalo slovo "null" ani undefined
                     const rawPhone = (car.phone && car.phone !== 'null' && car.phone !== 'undefined') ? String(car.phone) : '';
                     const safePhone = rawPhone.replace(/'/g, "\\'");
 
