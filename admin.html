@@ -2,54 +2,68 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pofel Garage - Administrace</title>
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="manifest" href="/manifest.json">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        h1 { font-size: 22px; color: #1a1a1a; text-align: center; margin-bottom: 15px; }
-        h2 { font-size: 18px; color: #333; margin-top: 0; }
-        .form-group { margin-bottom: 12px; }
-        label { display: block; margin-bottom: 4px; font-weight: bold; color: #555; font-size: 14px; }
-        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; } /* font-size 16px zabraňuje zoomování na iOS */
-        button { background: #0066cc; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; font-weight: bold; }
-        button:hover { background: #0052a3; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 8px; color: #333; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 12px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 100%; }
+        h1 { font-size: 20px; text-align: center; margin: 5px 0 15px 0; color: #1a1a1a; }
+        h2 { font-size: 16px; margin-top: 0; color: #444; }
         
-        /* Mobilní karty místo tabulky */
-        .car-list { margin-top: 20px; }
-        .car-card { background: #fafafa; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
-        .car-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 8px; }
-        .car-spz { font-size: 18px; font-weight: bold; color: #0066cc; }
-        .car-model { font-weight: bold; color: #444; }
-        .car-info { font-size: 14px; color: #666; margin-bottom: 6px; }
-        .car-meta { font-size: 12px; color: #888; background: #f0f2f5; padding: 6px; border-radius: 4px; margin-top: 8px; }
+        .form-container { background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e1e4e8; }
+        .form-group { margin-bottom: 10px; }
+        label { display: block; margin-bottom: 3px; font-weight: 600; font-size: 13px; color: #555; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; background: #fff; }
         
-        .actions { display: flex; gap: 8px; margin-top: 10px; }
-        .btn-action { padding: 8px 12px; font-size: 14px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; width: 50%; }
+        .btn { background: #0066cc; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; font-weight: bold; text-align: center; }
+        .btn:active { background: #004d99; }
+        
+        .car-list { display: flex; flex-direction: column; gap: 10px; }
+        
+        /* Rozbalovací karty */
+        .car-card { background: #fff; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: all 0.2s ease; }
+        .car-header { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #fafafa; cursor: pointer; user-select: none; }
+        .car-header:active { background: #f0f2f5; }
+        .car-spz { font-size: 17px; font-weight: bold; color: #0066cc; }
+        .car-model { font-size: 15px; font-weight: 600; color: #222; }
+        .car-arrow { font-size: 14px; color: #888; transition: transform 0.2s; }
+        
+        /* Skrytý obsah, který se po kliknutí rozbalí */
+        .car-body { display: none; padding: 12px; border-top: 1px solid #eee; background: #fff; }
+        .car-card.expanded .car-body { display: block; }
+        .car-card.expanded .car-arrow { transform: rotate(180deg); }
+
+        .car-row { font-size: 13px; margin-bottom: 6px; }
+        .car-meta { font-size: 11px; color: #666; background: #f9fafb; padding: 8px; border-radius: 4px; margin-top: 8px; display: flex; justify-content: space-between; }
+        
+        .card-actions { display: flex; gap: 8px; margin-top: 12px; }
+        .btn-action { padding: 10px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold; flex: 1; text-align: center; cursor: pointer; }
         .btn-edit { background: #ffc107; color: #000; }
-        .btn-edit:hover { background: #e0a800; }
-        .btn-delete { background: #dc3545; color: white; }
-        .btn-delete:hover { background: #c82333; }
+        .btn-delete { background: #dc3545; color: #fff; }
         
-        .logout-btn { background: #6c757d; margin-bottom: 15px; width: auto; display: inline-block; text-decoration: none; color: white; padding: 8px 12px; border-radius: 6px; font-size: 14px; }
-        .logout-btn:hover { background: #5a6268; }
+        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .logout-btn { background: #6c757d; color: white; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <a href="/" class="logout-btn">← Hlavní stránka</a>
+    <div class="top-nav">
+        <a href="/" class="logout-btn">← Hlavní stránka</a>
+        <span id="formModeIndicator" style="font-size: 12px; color: #666; font-weight: bold;">Režim: Přidání</span>
+    </div>
     
-    <h1>Administrace Pofel Garage</h1>
+    <h1>Pofel Garage Admin</h1>
 
-    <!-- Formulář pro přidání / úpravu vozidla -->
-    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-        <h2>Přidat / Upravit vozidlo</h2>
+    <!-- Formulář -->
+    <div class="form-container">
+        <h2 id="formTitle">Přidat nové vozidlo</h2>
         <form id="vehicleForm">
             <div class="form-group">
-                <label for="spz">SPZ (Registrační značka):</label>
+                <label for="spz">SPZ:</label>
                 <input type="text" id="spz" required placeholder="např. 1B23456" style="text-transform: uppercase;">
             </div>
             <div class="form-group">
@@ -66,22 +80,21 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="note">Poznámka / Popis práce:</label>
+                <label for="note">Poznámka:</label>
                 <textarea id="note" rows="2" placeholder="Detaily opravy..."></textarea>
             </div>
-            <button type="submit">Uložit vozidlo</button>
+            <button type="submit" class="btn" id="submitBtn">Uložit vozidlo</button>
         </form>
     </div>
 
-    <!-- Seznam vozidel -->
+    <!-- Seznam -->
     <h2>Seznam vozidel</h2>
     <div id="carListContainer" class="car-list">
-        <!-- Sem JavaScript dynamicky natahuje karty -->
+        <!-- Načítá se přes JS -->
     </div>
 </div>
 
 <script>
-    // Načtení seznamu vozidel
     function loadVehicles() {
         fetch('/api/admin/vehicles')
             .then(res => res.json())
@@ -90,7 +103,7 @@
                 container.innerHTML = '';
                 
                 if (cars.length === 0) {
-                    container.innerHTML = `<p style="text-align: center; color: #777;">Žádná vozidla v databázi.</p>`;
+                    container.innerHTML = `<p style="text-align: center; color: #777; font-size: 14px;">Žádná vozidla v databázi.</p>`;
                     return;
                 }
 
@@ -99,39 +112,53 @@
                     const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
 
                     container.innerHTML += `
-                        <div class="car-card">
-                            <div class="car-header">
-                                <span class="car-spz">${car.spz}</span>
-                                <span class="car-model">${car.model}</span>
+                        <div class="car-card" id="card-${car.id}">
+                            <div class="car-header" onclick="toggleCard(${car.id})">
+                                <div>
+                                    <span class="car-spz">${car.spz}</span>
+                                    <span class="car-model" style="margin-left: 8px;">${car.model}</span>
+                                </div>
+                                <span class="car-arrow">▼</span>
                             </div>
-                            <div class="car-info"><strong>Stav:</strong> ${car.status}</div>
-                            <div class="car-info"><strong>Poznámka:</strong> ${car.note || '-'}</div>
-                            <div class="car-meta">
-                                <div>Zapsal: <strong>${car.created_by || '-'}</strong></div>
-                                <div>Upravil: <strong>${car.updated_by || '-'}</strong></div>
-                                <div style="font-size: 11px; color: #aaa; margin-top: 2px;">Změněno: ${car.updated_at || '-'}</div>
-                            </div>
-                            <div class="actions">
-                                <button class="btn-action btn-edit" onclick="prepareEdit('${car.spz}', '${safeModel}', '${car.status}', '${safeNote}')">Upravit</button>
-                                <button class="btn-action btn-delete" onclick="deleteCar(${car.id})">Smazat</button>
+                            <div class="car-body">
+                                <div class="car-row"><strong>Stav:</strong> <span style="color: #0066cc;">${car.status}</span></div>
+                                <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
+                                <div class="car-meta">
+                                    <div>Zapsal: <strong>${car.created_by || '-'}</strong></div>
+                                    <div>Upravil: <strong>${car.updated_by || '-'}</strong></div>
+                                </div>
+                                <div class="card-actions">
+                                    <button class="btn-action btn-edit" onclick="prepareEdit('${car.spz}', '${safeModel}', '${car.status}', '${safeNote}')">Upravit</button>
+                                    <button class="btn-action btn-delete" onclick="deleteCar(${car.id})">Smazat</button>
+                                </div>
                             </div>
                         </div>
                     `;
                 });
             })
-            .catch(err => console.error('Chyba při načítání vozidel:', err));
+            .catch(err => console.error('Chyba:', err));
     }
 
-    // Předvyplnění formuláře
+    // Funkce pro rozbalení/zabalení karty
+    function toggleCard(id) {
+        const card = document.getElementById(`card-${id}`);
+        card.classList.toggle('expanded');
+    }
+
     function prepareEdit(spz, model, status, note) {
         document.getElementById('spz').value = spz;
         document.getElementById('model').value = model;
         document.getElementById('status').value = status;
         document.getElementById('note').value = note === '-' ? '' : note;
+        
+        document.getElementById('formTitle').innerText = 'Upravit vozidlo (' + spz + ')';
+        document.getElementById('submitBtn').innerText = 'Aktualizovat vozidlo';
+        document.getElementById('formModeIndicator').innerText = 'Režim: Úprava';
+        document.getElementById('formModeIndicator').style.color = '#d97706';
+        
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // Odeslání formuláře
     document.getElementById('vehicleForm').addEventListener('submit', function(e) {
         e.preventDefault();
 
@@ -151,6 +178,10 @@
         .then(result => {
             if (result.message) {
                 document.getElementById('vehicleForm').reset();
+                document.getElementById('formTitle').innerText = 'Přidat nové vozidlo';
+                document.getElementById('submitBtn').innerText = 'Uložit vozidlo';
+                document.getElementById('formModeIndicator').innerText = 'Režim: Přidání';
+                document.getElementById('formModeIndicator').style.color = '#666';
                 loadVehicles();
             } else {
                 alert('Chyba: ' + (result.error || 'Neznámá chyba'));
@@ -159,7 +190,6 @@
         .catch(err => alert('Chyba při komunikaci se serverem.'));
     });
 
-    // Smazání vozidla
     function deleteCar(id) {
         if (!confirm('Opravdu chcete toto vozidlo smazat?')) return;
 
