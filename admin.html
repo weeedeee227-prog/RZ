@@ -82,6 +82,7 @@
                         <option value="Probíhá oprava">Probíhá oprava</option>
                         <option value="Čeká se na díly">Čeká se na díly</option>
                         <option value="Opraveno - připraveno k vyzvednutí">Opraveno - připraveno k vyzvednutí</option>
+                        <option value="Vozidlo se nenachází v servise">Vozidlo se nenachází v servise</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -185,7 +186,7 @@
 
         container.innerHTML = '';
         allVehicles.forEach(car => {
-            const smsText = encodeURIComponent(`Dobrý den, vaše vozidlo (${car.spz}) v P&R MONT. Stav: ${car.status}`);
+            const smsText = encodeURIComponent(`Dobrý den, vaše vozidlo (${car.spz}) je  Stav: ${car.status} děkuji.`);
             const safeModel = (car.model || '').replace(/'/g, "\\'");
             const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
             
