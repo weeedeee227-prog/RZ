@@ -122,7 +122,7 @@ app.get('/manifest.json', (req, res) => {
         theme_color: "#2563eb",
         icons: [
             {
-                src: "/favicon.jpg",
+                src: "/favicon.png",
                 sizes: "192x192 512x512",
                 type: "image/jpeg"
             }
