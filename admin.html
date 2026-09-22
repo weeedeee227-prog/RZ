@@ -38,9 +38,6 @@
         .btn-action { padding: 10px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold; flex: 1; cursor: pointer; }
         .btn-edit { background: #ffc107; color: #000; }
         .btn-delete { background: #dc3545; color: #fff; }
-        .top-nav { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 12px; }
-        .nav-btn { background: #6c757d; color: white; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 12px; border: none; cursor: pointer; font-weight: bold; }
-        .update-btn { background: #17a2b8; }
 
         #notifyModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; }
         .modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center; }
@@ -49,11 +46,7 @@
 <body>
 
 <div class="container">
-    <div class="top-nav">
-        <button onclick="forceUpdateApp()" class="nav-btn update-btn">🔄 Aktualizovat</button>
-    </div>
-    
-    <div style="text-align: center; margin-bottom: 15px;">
+    <div style="text-align: center; margin-bottom: 15px; margin-top: 5px;">
         <h1 style="margin: 0; font-size: 20px;">Pofel Garage Admin</h1>
         <span id="formModeIndicator" style="font-size: 12px; color: #666; font-weight: bold;">Režim: Přidání</span>
     </div>
@@ -94,7 +87,7 @@
     <div id="carListContainer" class="car-list"></div>
 
     <div style="text-align: center; margin-top: 25px; margin-bottom: 10px;">
-        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v2.0</span>
+        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v2.2</span>
     </div>
 </div>
 
@@ -109,15 +102,6 @@
 </div>
 
 <script>
-    function forceUpdateApp() {
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(registrations => {
-                for (let reg of registrations) { reg.unregister(); }
-            });
-        }
-        window.location.reload();
-    }
-
     function formatPhoneNumber(rawPhone) {
         if (!rawPhone) return '';
         let cleaned = rawPhone.replace(/\s+/g, '').trim();
@@ -149,8 +133,8 @@
                 cars.forEach(car => {
                     const safeModel = (car.model || '').replace(/'/g, "\\'");
                     const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
-                    const rawPhoneVal = car.phone || '';
-                    const safePhone = rawPhoneVal.replace(/'/g, "\\'");
+                    const rawPhone = car.phone ? String(car.phone) : '';
+                    const safePhone = rawPhone.replace(/'/g, "\\'");
 
                     container.innerHTML += `
                         <div class="car-card" id="card-${car.id}">
@@ -160,7 +144,7 @@
                             </div>
                             <div class="car-body">
                                 <div class="car-row"><strong>Stav:</strong> <span style="color:#0066cc;">${car.status}</span></div>
-                                <div class="car-row"><strong>Telefon:</strong> ${rawPhoneVal ? `<a href="tel:${rawPhoneVal}">${rawPhoneVal}</a>` : '-'}</div>
+                                <div class="car-row"><strong>Telefon:</strong> ${rawPhone ? `<a href="tel:${rawPhone}">${rawPhone}</a>` : '-'}</div>
                                 <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
                                 <div class="car-meta">
                                     <div>Zapsal: <strong>${car.created_by || '-'}</strong></div>
