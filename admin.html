@@ -35,10 +35,10 @@
         .btn-action { padding: 10px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold; flex: 1; cursor: pointer; }
         .btn-edit { background: #ffc107; color: #000; }
         .btn-delete { background: #dc3545; color: #fff; }
-        .top-nav { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 12px; }
-        .nav-btn { background: #6c757d; color: white; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 12px; border: none; cursor: pointer; font-weight: bold; }
-        .update-btn { background: #17a2b8; }
+        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .logout-btn { background: #6c757d; color: white; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
 
+        /* Styl pro vyskakovací okno */
         #notifyModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; }
         .modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center; }
     </style>
@@ -47,13 +47,11 @@
 
 <div class="container">
     <div class="top-nav">
-        <button onclick="forceUpdateApp()" class="nav-btn update-btn">🔄 Aktualizovat</button>
-    </div>
-    
-    <div style="text-align: center; margin-bottom: 15px;">
-        <h1 style="margin: 0; font-size: 20px;">Pofel Garage Admin</h1>
+        <a href="/" class="logout-btn">← Hlavní stránka</a>
         <span id="formModeIndicator" style="font-size: 12px; color: #666; font-weight: bold;">Režim: Přidání</span>
     </div>
+    
+    <h1>Pofel Garage Admin</h1>
 
     <div class="form-container">
         <h2 id="formTitle">Přidat vozidlo</h2>
@@ -67,7 +65,7 @@
                 <input type="text" id="model" required>
             </div>
             <div class="form-group">
-                <label for="phone">Telefon na zákazníka (nepovinné):</label>
+                <label for="phone">Telefon na zákazníka (volitelné):</label>
                 <input type="tel" id="phone" placeholder="+420 123 456 789">
             </div>
             <div class="form-group">
@@ -89,12 +87,9 @@
 
     <h2>Seznam vozidel</h2>
     <div id="carListContainer" class="car-list"></div>
-
-    <div style="text-align: center; margin-top: 25px; margin-bottom: 10px;">
-        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v1.4</span>
-    </div>
 </div>
 
+<!-- Modalní okno po dokončení opravy -->
 <div id="notifyModal">
     <div class="modal-content">
         <h3 style="margin-top:0; color:#28a745;">✅ Auto je hotové!</h3>
@@ -106,17 +101,6 @@
 </div>
 
 <script>
-    function forceUpdateApp() {
-        // Pouze zrušíme registraci Service Workera v prohlížeči, data na serveru zůstanou naprosto v bezpečí
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(registrations => {
-                for (let reg of registrations) { reg.unregister(); }
-            });
-        }
-        alert('Mezipaměť aplikace vyčištěna. Načítám nejnovější verzi v1.4...');
-        window.location.reload(true);
-    }
-
     function loadVehicles() {
         fetch('/api/admin/vehicles')
             .then(res => res.json())
@@ -137,7 +121,7 @@
                             </div>
                             <div class="car-body">
                                 <div class="car-row"><strong>Stav:</strong> <span style="color:#0066cc;">${car.status}</span></div>
-                                <div class="car-row"><strong>Telefon:</strong> ${car.phone ? `<a href="tel:${car.phone}">${car.phone}</a>` : '-'}</div>
+                                ${car.phone ? `<div class="car-row"><strong>Telefon:</strong> <a href="tel:${car.phone}">${car.phone}</a></div>` : ''}
                                 <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
                                 <div class="car-meta">
                                     <div>Zapsal: <strong>${car.created_by || '-'}</strong></div>
@@ -160,16 +144,18 @@
         document.getElementById('model').value = model;
         document.getElementById('status').value = status;
         document.getElementById('note').value = note === '-' ? '' : note;
-        document.getElementById('phone').value = (phone && phone !== 'undefined') ? phone : '';
+        document.getElementById('phone').value = phone || '';
         
         document.getElementById('formTitle').innerText = 'Upravit vozidlo (' + spz + ')';
         document.getElementById('formModeIndicator').innerText = 'Režim: Úprava';
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function triggerNotifyModal(phone, spz, model) {
+    function triggerNotifyModal(phone, spz) {
         const modal = document.getElementById('notifyModal');
-        const msg = `Dobrý den, Vaše vozidlo ${spz} (${model}) je připraveno k vyzvednutí. Pofel Garage`;
+        const msg = `Dobry den, Vase vozidlo (${spz}) je opraveno a pripraveno k vyzvednuti. Pofel Garage`;
+        
+        // Android i iOS podpora pro SMS (iOS občas zlobí s ?, takže & je pojistka)
         const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? '&' : '?';
         
         document.getElementById('btnCall').href = `tel:${phone}`;
@@ -196,10 +182,11 @@
         .then(res => res.json())
         .then(result => {
             if (result.message) {
+                // Zkontrolujeme, jestli je auto hotové a má telefon
                 if (data.status === 'Opraveno - připraveno k vyzvednutí' && data.phone !== '') {
-                    triggerNotifyModal(data.phone, data.spz, data.model);
+                    triggerNotifyModal(data.phone, data.spz);
                 }
-                document.getElementById('vehicleForm'].reset();
+                document.getElementById('vehicleForm').reset();
                 document.getElementById('formTitle').innerText = 'Přidat vozidlo';
                 document.getElementById('formModeIndicator').innerText = 'Režim: Přidání';
                 loadVehicles();
