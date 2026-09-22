@@ -3,97 +3,281 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>P&R MONT - Sledování zakázky</title>
+    <!-- Zákaz cachování, aby aplikace neměla přístup k předchozím verzím -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>P&R MONT - Servisní systém</title>
     <style>
         * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 16px; color: #333; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        .container { max-width: 500px; width: 100%; background: white; padding: 28px; border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); text-align: center; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 16px; color: #333; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { font-size: 20px; text-align: center; margin-top: 0; color: #0066cc; }
+        .hidden { display: none !important; }
         
-        .brand-header { font-size: 14px; font-weight: 800; color: #0066cc; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
-        h1 { font-size: 22px; margin: 0 0 8px 0; color: #111; }
-        p { color: #666; font-size: 14px; margin-bottom: 24px; line-height: 1.4; }
-        
-        .search-box { display: flex; gap: 8px; margin-bottom: 20px; }
-        input { flex: 1; padding: 12px 14px; border: 1px solid #ccd0d5; border-radius: 8px; font-size: 16px; text-transform: uppercase; text-align: center; font-weight: bold; background: #fff; }
-        input:focus { border-color: #0066cc; outline: none; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
-        
-        .btn { background: #0066cc; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; transition: background 0.2s; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 13px; color: #555; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; }
+        .btn { background: #0066cc; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; font-weight: bold; text-align: center; display: inline-block; text-decoration: none; }
         .btn:active { background: #004d99; }
         
-        #resultContainer { margin-top: 20px; text-align: left; }
-        .status-card { background: #f8f9fa; border: 1px solid #e1e4e8; border-radius: 10px; padding: 18px; margin-top: 10px; animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        /* Karty vozidel pro mechaniky */
+        .card-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
+        .car-card { background: #fafafa; border: 1px solid #d1d5db; border-radius: 8px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .car-header { display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: bold; color: #0066cc; margin-bottom: 8px; }
+        .car-row { font-size: 13px; margin-bottom: 6px; }
         
-        .status-title { font-size: 17px; font-weight: bold; color: #111; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-        .status-spz { background: #eef2f7; padding: 4px 8px; border-radius: 6px; color: #0066cc; font-family: monospace; }
-        .status-row { font-size: 14px; margin-bottom: 8px; color: #444; }
-        .status-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 13px; }
-        
-        .error-msg { color: #d9534f; font-weight: 600; font-size: 14px; background: #fdf7f7; padding: 12px; border-radius: 8px; border: 1px solid #f9dbdb; text-align: center; }
-        
-        .admin-link { display: inline-block; margin-top: 30px; font-size: 13px; color: #888; text-decoration: none; font-weight: 500; }
-        .admin-link:hover { color: #0066cc; text-decoration: underline; }
+        /* Akční tlačítka v kartě (volání, SMS) */
+        .card-actions-row { display: flex; gap: 8px; margin-top: 10px; }
+        .btn-call { background: #28a745; color: white; padding: 8px; border-radius: 6px; text-align: center; text-decoration: none; flex: 1; font-weight: bold; font-size: 13px; }
+        .btn-sms { background: #17a2b8; color: white; padding: 8px; border-radius: 6px; text-align: center; text-decoration: none; flex: 1; font-weight: bold; font-size: 13px; }
+        .btn-edit { background: #ffc107; color: #000; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; font-size: 13px; }
+        .btn-delete { background: #dc3545; color: #fff; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; font-size: 13px; }
+
+        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 13px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="brand-header">P&R MONT</div>
-    <h1>Sledování zakázky</h1>
-    <p>Zadejte registrační značku (SPZ) vašeho vozidla a zjistěte aktuální stav opravy.</p>
-    
-    <div class="search-box">
-        <input type="text" id="searchSpz" placeholder="např. 1B23456">
-        <button onclick="searchCar()" class="btn">Hledat</button>
+    <!-- 7. PŘIHLÁŠKOVÁ FORMULÁŘ (Vždy při otevření) -->
+    <div id="loginView">
+        <h1>P&R MONT - Přihlášení</h1>
+        <p style="text-align: center; font-size: 13px; color: #666;">Zadejte své jméno ve formátu 2+2 (např. Petr Novák = <b>peno</b> nebo zvolte Zákazník)</p>
+        <div class="form-group">
+            <label>Vaše přihlašovací údaje (2+2):</label>
+            <input type="text" id="loginInput" placeholder="např. jeno" maxlength="4" style="text-transform: lowercase; text-align: center; font-weight: bold; font-size: 18px;">
+        </div>
+        <button class="btn" onclick="processLogin()">Vstoupit do systému</button>
+        <button class="btn" style="background: #6c757d; margin-top: 10px;" onclick="enterAsClient()">Jsem zákazník (pouze sledování)</button>
     </div>
 
-    <div id="resultContainer"></div>
+    <!-- 1. ZÁKAZNICKÉ ROZHRANÍ -->
+    <div id="clientView" class="hidden">
+        <div class="top-nav">
+            <span>Zákaznický portál</span>
+            <a href="#" onclick="logout()" style="color: #dc3545;">Odhlásit</a>
+        </div>
+        <h1>P&R MONT</h1>
+        <p style="text-align: center; font-size: 14px; color: #666;">Zadejte SPZ pro zjištění stavu zakázky:</p>
+        <div class="form-group">
+            <input type="text" id="clientSpz" placeholder="např. 1B23456" style="text-transform: uppercase; text-align: center; font-weight: bold;">
+        </div>
+        <button class="btn" onclick="clientSearch()">Zjistit stav</button>
+        <div id="clientResult" style="margin-top: 15px;"></div>
+    </div>
 
-    <a href="/admin.html" class="admin-link">🔒 Vstup do administrace</a>
+    <!-- 1. & 2. & 3. & 4. & 5. MECHANIK / ADMIN ROZHRANÍ S KARTAMI -->
+    <div id="mechanicView" class="hidden">
+        <div class="top-nav">
+            <span>Přihlášen: <strong id="loggedUserDisplay"></strong></span>
+            <a href="#" onclick="logout()" style="color: #dc3545;">Odhlásit</a>
+        </div>
+        <h1>Administrace mechanika</h1>
+
+        <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; border: 1px solid #e1e4e8; margin-bottom: 20px;">
+            <h3 id="formTitle" style="margin-top:0; font-size:15px;">Přidat vozidlo</h3>
+            <form id="vehicleForm" onsubmit="saveVehicle(event)">
+                <div class="form-group">
+                    <label>SPZ:</label>
+                    <input type="text" id="spz" required style="text-transform: uppercase;">
+                </div>
+                <div class="form-group">
+                    <label>Model vozidla:</label>
+                    <input type="text" id="model" required>
+                </div>
+                <div class="form-group">
+                    <label>Telefon na zákazníka (povinné):</label>
+                    <input type="tel" id="phone" required placeholder="+420 123 456 789">
+                </div>
+                <div class="form-group">
+                    <label>Stav opravy:</label>
+                    <select id="status" required>
+                        <option value="Přijato do servisu">Přijato do servisu</option>
+                        <option value="Probíhá oprava">Probíhá oprava</option>
+                        <option value="Čeká se na díly">Čeká se na díly</option>
+                        <option value="Opraveno - připraveno k vyzvednutí">Opraveno - připraveno k vyzvednutí</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Poznámka:</label>
+                    <textarea id="note" rows="2"></textarea>
+                </div>
+                <button type="submit" class="btn">Uložit do karet</button>
+            </form>
+        </div>
+
+        <h3>Seznam vozidel v kartách</h3>
+        <div id="mechanicCardList" class="card-list"></div>
+    </div>
 </div>
 
 <script>
-    let allCars = [];
+    let currentUser = '';
+    let allVehicles = [];
 
-    // Načtení seznamu vozidel ze serveru hned při otevření stránky
-    fetch('/api/admin/vehicles')
+    // 7. PŘIHLÁŠENÍ (Vynuceno při každém načtení)
+    function processLogin() {
+        const val = document.getElementById('loginInput').value.trim().toLowerCase();
+        if (val.length !== 4) {
+            alert('Zadejte prosím přesně 4 znaky ve formátu 2+2 (např. jeno).');
+            return;
+        }
+        currentUser = val;
+        document.getElementById('loggedUserDisplay').innerText = currentUser;
+        document.getElementById('loginView').classList.add('hidden');
+        document.getElementById('mechanicView').classList.remove('hidden');
+        loadData();
+    }
+
+    function enterAsClient() {
+        document.getElementById('loginView').classList.add('hidden');
+        document.getElementById('clientView').classList.remove('hidden');
+        loadData();
+    }
+
+    function logout() {
+        location.reload(); // Vynutí opětovné přihlášení
+    }
+
+    function loadData() {
+        fetch('/api/vehicles')
+            .then(res => res.json())
+            .then(data => {
+                allVehicles = data;
+                renderMechanicCards();
+            });
+    }
+
+    // 2., 3., 4. UKLÁDÁNÍ DO KARET S POVINNÝM TELEFONEM A TLAČÍTKY
+    function saveVehicle(e) {
+        e.preventDefault();
+        const data = {
+            spz: document.getElementById('spz').value.trim(),
+            model: document.getElementById('model').value.trim(),
+            phone: document.getElementById('phone').value.trim(),
+            status: document.getElementById('status').value,
+            note: document.getElementById('note').value.trim(),
+            user: currentUser
+        };
+
+        if (!data.phone) {
+            alert('Telefonní číslo zákazníka je povinné!');
+            return;
+        }
+
+        fetch('/api/vehicles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
         .then(res => res.json())
-        .then(data => { allCars = data; })
-        .catch(err => console.error('Chyba při načítání dat:', err));
+        .then(res => {
+            if (res.error) {
+                alert(res.error);
+                return;
+            }
+            // 5. NOTIFIKACE (Jako nainstalovaná aplikace / prohlížeč)
+            triggerAppNotification(data.spz, data.status);
+            
+            document.getElementById('vehicleForm').reset();
+            loadData();
+        });
+    }
 
-    function searchCar() {
-        const query = document.getElementById('searchSpz').value.trim().toUpperCase();
-        const container = document.getElementById('resultContainer');
-        
-        if (!query) {
-            container.innerHTML = '<div class="error-msg">Zadejte prosím SPZ vozidla.</div>';
+    function triggerAppNotification(spz, status) {
+        if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("P&R MONT - Změna v registru", {
+                body: `Vozidlo ${spz} má nový stav: ${status}`,
+                icon: ""
+            });
+        } else if ("Notification" in window && Notification.permission !== "denied") {
+            Notification.requestPermission().then(permission => {
+                if (permission === "granted") {
+                    new Notification("P&R MONT - Změna v registru", {
+                        body: `Vozidlo ${spz} má nový stav: ${status}`
+                    });
+                }
+            });
+        }
+    }
+
+    // Vykreslení karet pro mechaniky
+    function renderMechanicCards() {
+        const container = document.getElementById('mechanicCardList');
+        if (allVehicles.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:#888;">Žádná vozidla v databance.</p>';
             return;
         }
 
-        // Vyhledání vozu podle SPZ (ignoruje mezery a velikost písmen)
-        const found = allCars.find(car => car.spz.replace(/\s+/g, '').toUpperCase() === query.replace(/\s+/g, ''));
-
-        if (!found) {
-            container.innerHTML = '<div class="error-msg">Vozidlo s touto SPZ nebolo v systému nalezeno.</div>';
-            return;
-        }
-
-        container.innerHTML = `
-            <div class="status-card">
-                <div class="status-title">
-                    <span>${found.model}</span>
-                    <span class="status-spz">${found.spz}</span>
+        container.innerHTML = '';
+        allVehicles.forEach(car => {
+            const smsText = encodeURIComponent(`Dobrý den, vaše vozidlo (${car.spz}) v P&R MONT. Stav: ${car.status}`);
+            const safeModel = (car.model || '').replace(/'/g, "\\'");
+            const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
+            
+            container.innerHTML += `
+                <div class="car-card">
+                    <div class="car-header">
+                        <span>${car.spz}</span>
+                        <span style="font-size: 13px; color: #555; font-weight: normal;">${car.model}</span>
+                    </div>
+                    <div class="car-row"><strong>Stav:</strong> <span style="color:#0066cc;">${car.status}</span></div>
+                    <div class="car-row"><strong>Telefon:</strong> <a href="tel:${car.phone}">${car.phone}</a></div>
+                    <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
+                    <div class="car-row" style="font-size: 11px; color: #888; margin-top: 4px;">Zapsal/Upravil: ${car.updated_by || '-'}</div>
+                    
+                    <div class="card-actions-row">
+                        <a href="tel:${car.phone}" class="btn-call">📞 Zavolat</a>
+                        <a href="sms:${car.phone}?body=${smsText}" class="btn-sms">💬 SMS</a>
+                        <button class="btn-edit" onclick="editCar('${car.spz}', '${safeModel}', '${car.status}', '${safeNote}', '${car.phone}')">Upravit</button>
+                        <button class="btn-delete" onclick="deleteCar(${car.id})">Smazat</button>
+                    </div>
                 </div>
-                <div class="status-row"><strong>Stav opravy:</strong><br><span style="color: #0066cc; font-weight: bold; font-size: 15px;">${found.status}</span></div>
-                <div class="status-row" style="margin-top: 10px;"><strong>Poznámka servisu:</strong><br><span style="color: #666;">${found.note || 'Žádná doplňující poznámka'}</span></div>
+            `;
+        });
+    }
+
+    function editCar(spz, model, status, note, phone) {
+        document.getElementById('spz').value = spz;
+        document.getElementById('model').value = model;
+        document.getElementById('status').value = status;
+        document.getElementById('note').value = note === '-' ? '' : note;
+        document.getElementById('phone').value = phone;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteCar(id) {
+        if (!confirm('Opravdu smazat vozidlo?')) return;
+        fetch('/api/vehicles/' + id, { method: 'DELETE' }).then(() => loadData());
+    }
+
+    // Zákaznické vyhledávání
+    function clientSearch() {
+        const query = document.getElementById('clientSpz').value.trim().toUpperCase();
+        const container = document.getElementById('clientResult');
+        if (!query) {
+            container.innerHTML = '<p style="color:red; text-align:center;">Zadejte SPZ.</p>';
+            return;
+        }
+        const found = allVehicles.find(c => c.spz.replace(/\s+/g, '') === query.replace(/\s+/g, ''));
+        if (!found) {
+            container.innerHTML = '<p style="color:red; text-align:center;">Vozidlo nebylo nalezeno.</p>';
+            return;
+        }
+        container.innerHTML = `
+            <div style="background: #f8f9fa; border: 1px solid #ccc; padding: 15px; border-radius: 8px;">
+                <strong>${found.spz} (${found.model})</strong><br>
+                Stav: <span style="color:#0066cc; font-weight:bold;">${found.status}</span><br>
+                Poznámka: ${found.note || '-'}
             </div>
         `;
     }
 
-    // Vyhledání pomocí klávesy Enter
-    document.getElementById('searchSpz').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') searchCar();
-    });
+    // Povolit notifikace při startu
+    if ("Notification" in window && Notification.permission !== "granted") {
+        Notification.requestPermission();
+    }
 </script>
 </body>
 </html>
