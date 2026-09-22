@@ -19,7 +19,10 @@
         th, td { border: 1px solid #ddd; padding: 12px; text-align: left; font-size: 14px; }
         th { background-color: #f8f9fa; color: #333; }
         tr:nth-child(even) { background-color: #f9f9f9; }
-        .btn-delete { background: #dc3545; padding: 6px 12px; font-size: 12px; width: auto; }
+        .btn-action { padding: 6px 12px; font-size: 12px; width: auto; margin-right: 5px; }
+        .btn-edit { background: #ffc107; color: #000; }
+        .btn-edit:hover { background: #e0a800; }
+        .btn-delete { background: #dc3545; }
         .btn-delete:hover { background: #c82333; }
         .logout-btn { background: #6c757d; margin-bottom: 20px; width: auto; display: inline-block; text-decoration: none; color: white; padding: 10px 15px; border-radius: 6px; }
         .logout-btn:hover { background: #5a6268; }
@@ -34,7 +37,7 @@
 
     <!-- Formulář pro přidání / úpravu vozidla -->
     <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 20px;">
-        <h2>Přidat / Upravit vozidlo</h2>
+        <h2 id="formTitle">Přidat / Upravit vozidlo</h2>
         <form id="vehicleForm">
             <div class="form-group">
                 <label for="spz">SPZ (Registrační značka):</label>
@@ -57,7 +60,7 @@
                 <label for="note">Poznámka / Popis práce:</label>
                 <textarea id="note" rows="3" placeholder="Detaily opravy..."></textarea>
             </div>
-            <button type="submit">Uložit vozidlo</button>
+            <button type="submit">Uložit změny / Přidat vozidlo</button>
         </form>
     </div>
 
@@ -99,6 +102,10 @@
                 }
 
                 cars.forEach(car => {
+                    // Ošetření uvozovek pro bezpečné předání do funkce
+                    const safeModel = (car.model || '').replace(/'/g, "\\'");
+                    const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
+
                     tbody.innerHTML += `
                         <tr>
                             <td><strong>${car.spz}</strong></td>
@@ -109,13 +116,25 @@
                             <td><span style="color: #28a745; font-weight: bold;">${car.updated_by || '-'}</span></td>
                             <td>${car.updated_at || '-'}</td>
                             <td>
-                                <button class="btn-delete" onclick="deleteCar(${car.id})">Smazat</button>
+                                <button class="btn-action btn-edit" onclick="prepareEdit('${car.spz}', '${safeModel}', '${car.status}', '${safeNote}')">Upravit</button>
+                                <button class="btn-action btn-delete" onclick="deleteCar(${car.id})">Smazat</button>
                             </td>
                         </tr>
                     `;
                 });
             })
             .catch(err => console.error('Chyba při načítání vozidel:', err));
+    }
+
+    // Funkce pro předvyplnění formuláře při kliknutí na Upravit
+    function prepareEdit(spz, model, status, note) {
+        document.getElementById('spz').value = spz;
+        document.getElementById('model').value = model;
+        document.getElementById('status').value = status;
+        document.getElementById('note').value = note === '-' ? '' : note;
+        
+        // Posunout stránku nahoru k formuláři
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     // Odeslání formuláře pro uložení/aktualizaci
