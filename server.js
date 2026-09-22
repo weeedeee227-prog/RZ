@@ -108,19 +108,27 @@ app.delete('/api/vehicles/:id', (req, res) => {
     });
 });
 
-// --- PWA MANIFEST A SERVICE WORKER ---
+// --- PWA MANIFEST (S IKONOU PRO INSTALACI) ---
 app.get('/manifest.json', (req, res) => {
     res.json({
-        name: "Autoservis Registr Vozidel",
+        name: "Autoservis - Registr Vozidel",
         short_name: "Autoservis",
         start_url: "/",
         display: "standalone",
-        background_color: "#1e293b",
+        background_color: "#0f172a",
         theme_color: "#2563eb",
-        icons: []
+        icons: [
+            {
+                src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'%3E%3Cpath d='M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.22.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.85 7h10.29l1.04 3H5.81l1.04-3zM19 17H5v-4.66l.12-.34h13.76l.12.34V17z'/%3E%3C/svg%3E",
+                sizes: "192x192 512x512",
+                type: "image/svg+xml",
+                purpose: "any maskable"
+            }
+        ]
     });
 });
 
+// --- SERVICE WORKER ---
 app.get('/sw.js', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript');
     res.send(`
@@ -130,7 +138,7 @@ app.get('/sw.js', (req, res) => {
     `);
 });
 
-// --- FRONTEND: KLIENTSKÉ ROZHRANÍ ( / ) - VYHLEDÁVÁNÍ PODLE SPZ ---
+// --- FRONTEND: KLIENTSKÉ ROZHRANÍ ( / ) ---
 app.get('/', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -189,7 +197,7 @@ app.get('/', (req, res) => {
                 const vehicle = vehicles.find(v => v.spz.toUpperCase() === querySpz);
 
                 if (!vehicle) {
-                    resultEl.innerHTML = '<div class="card" style="border-color: #dc2626;"><p style="color: #f87171; margin: 0;">Vozidlo s SPZ <strong>' + querySpz + '</strong> nebolo v databáze servisu nalezeno.</p></div>';
+                    resultEl.innerHTML = '<div class="card" style="border-color: #dc2626;"><p style="color: #f87171; margin: 0;">Vozidlo s SPZ <strong>' + querySpz + '</strong> nebylo v databázi servisu nalezeno.</p></div>';
                     return;
                 }
 
@@ -223,6 +231,7 @@ app.get('/admin.html', (req, res) => {
     <title>Autoservis - Administrace</title>
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2563eb">
+    <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
     <style>
         :root { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 0; }
         .container { max-width: 800px; margin: 0 auto; padding: 20px; }
@@ -294,6 +303,7 @@ app.get('/admin.html', (req, res) => {
     <script>
         let currentUser = null;
 
+        document.getElementById('login-form').getElementById = document.getElementById('login-form'); // safety
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const userInput = document.getElementById('login-user').value.trim();
@@ -335,7 +345,7 @@ app.get('/admin.html', (req, res) => {
             e.preventDefault();
             const data = {
                 spz: document.getElementById('spz').value,
-                model: document.getElementById('model').value,
+                model: document.getElementById('model'].value,
                 status: document.getElementById('status').value,
                 phone: document.getElementById('phone').value,
                 note: document.getElementById('note').value,
