@@ -2,13 +2,6 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-
-    <link rel="manifest" href="/manifest.json?v=2.11">
-    <link rel="icon" type="image/png" href="/favicon.png">
-    <link rel="apple-touch-icon" href="/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pofel Garage - Administrace</title>
     <style>
@@ -42,6 +35,9 @@
         .btn-action { padding: 10px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold; flex: 1; cursor: pointer; }
         .btn-edit { background: #ffc107; color: #000; }
         .btn-delete { background: #dc3545; color: #fff; }
+        .top-nav { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 12px; }
+        .nav-btn { background: #6c757d; color: white; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 12px; border: none; cursor: pointer; font-weight: bold; }
+        .update-btn { background: #17a2b8; }
 
         #notifyModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; }
         .modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center; }
@@ -50,7 +46,11 @@
 <body>
 
 <div class="container">
-    <div style="text-align: center; margin-bottom: 15px; margin-top: 5px;">
+    <div class="top-nav">
+        <button onclick="forceUpdateApp()" class="nav-btn update-btn">🔄 Aktualizovat</button>
+    </div>
+    
+    <div style="text-align: center; margin-bottom: 15px;">
         <h1 style="margin: 0; font-size: 20px;">Pofel Garage Admin</h1>
         <span id="formModeIndicator" style="font-size: 12px; color: #666; font-weight: bold;">Režim: Přidání</span>
     </div>
@@ -68,7 +68,7 @@
             </div>
             <div class="form-group">
                 <label for="phone">Telefon na zákazníka (nepovinné):</label>
-                <input type="tel" id="phone" placeholder="603123456">
+                <input type="tel" id="phone" placeholder="+420 123 456 789">
             </div>
             <div class="form-group">
                 <label for="status">Stav opravy:</label>
@@ -77,7 +77,6 @@
                     <option value="Probíhá oprava">Probíhá oprava</option>
                     <option value="Čeká se na díly">Čeká se na díly</option>
                     <option value="Opraveno - připraveno k vyzvednutí">Opraveno - připraveno k vyzvednutí</option>
-                    <option value="Vozidlo předáno">Vozidlo předáno</option>
                 </select>
             </div>
             <div class="form-group">
@@ -92,7 +91,7 @@
     <div id="carListContainer" class="car-list"></div>
 
     <div style="text-align: center; margin-top: 25px; margin-bottom: 10px;">
-        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v2.11</span>
+        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v1.4</span>
     </div>
 </div>
 
@@ -107,35 +106,19 @@
 </div>
 
 <script>
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(registrations => {
-            for (let reg of registrations) { reg.unregister(); }
-        });
-    }
-
-    function formatPhoneNumber(rawPhone) {
-        if (!rawPhone) return '';
-        let cleaned = rawPhone.replace(/\s+/g, '').trim();
-        if (cleaned === '') return '';
-        if (cleaned.startsWith('+')) {
-            return cleaned;
+    function forceUpdateApp() {
+        // Pouze zrušíme registraci Service Workera v prohlížeči, data na serveru zůstanou naprosto v bezpečí
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(registrations => {
+                for (let reg of registrations) { reg.unregister(); }
+            });
         }
-        if (/^\d{9}$/.test(cleaned)) {
-            return '+420' + cleaned;
-        }
-        return cleaned;
-    }
-
-    function cleanPhoneForInput(phone) {
-        if (!phone || phone === 'undefined' || phone === 'null' || phone === '') return '';
-        if (phone.startsWith('+420')) {
-            return phone.substring(4);
-        }
-        return phone;
+        alert('Mezipaměť aplikace vyčištěna. Načítám nejnovější verzi v1.4...');
+        window.location.reload(true);
     }
 
     function loadVehicles() {
-        fetch('/api/admin/vehicles?t=' + new Date().getTime())
+        fetch('/api/admin/vehicles')
             .then(res => res.json())
             .then(cars => {
                 const container = document.getElementById('carListContainer');
@@ -144,10 +127,7 @@
                 cars.forEach(car => {
                     const safeModel = (car.model || '').replace(/'/g, "\\'");
                     const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
-                    
-                    const dbPhone = car.phone || car.telefon || car.tel || '';
-                    const rawPhone = (dbPhone && dbPhone !== 'null' && dbPhone !== 'undefined') ? String(dbPhone) : '';
-                    const safePhone = rawPhone.replace(/'/g, "\\'");
+                    const safePhone = (car.phone || '').replace(/'/g, "\\'");
 
                     container.innerHTML += `
                         <div class="car-card" id="card-${car.id}">
@@ -157,7 +137,7 @@
                             </div>
                             <div class="car-body">
                                 <div class="car-row"><strong>Stav:</strong> <span style="color:#0066cc;">${car.status}</span></div>
-                                <div class="car-row"><strong>Telefon:</strong> ${rawPhone ? `<a href="tel:${rawPhone}" onclick="event.stopPropagation()">${rawPhone}</a>` : '-'}</div>
+                                <div class="car-row"><strong>Telefon:</strong> ${car.phone ? `<a href="tel:${car.phone}">${car.phone}</a>` : '-'}</div>
                                 <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
                                 <div class="car-meta">
                                     <div>Zapsal: <strong>${car.created_by || '-'}</strong></div>
@@ -180,7 +160,7 @@
         document.getElementById('model').value = model;
         document.getElementById('status').value = status;
         document.getElementById('note').value = note === '-' ? '' : note;
-        document.getElementById('phone').value = cleanPhoneForInput(phone);
+        document.getElementById('phone').value = (phone && phone !== 'undefined') ? phone : '';
         
         document.getElementById('formTitle').innerText = 'Upravit vozidlo (' + spz + ')';
         document.getElementById('formModeIndicator').innerText = 'Režim: Úprava';
@@ -200,17 +180,10 @@
 
     document.getElementById('vehicleForm').addEventListener('submit', function(e) {
         e.preventDefault();
-        
-        const rawPhone = document.getElementById('phone').value;
-        const formattedPhone = formatPhoneNumber(rawPhone);
-
-        // Posíláme všechny myslitelné klíče pro telefon, aby server v DB určitě poznal, kam to zapsat
         const data = {
             spz: document.getElementById('spz').value.trim(),
             model: document.getElementById('model').value.trim(),
-            phone: formattedPhone,
-            telefon: formattedPhone,
-            tel: formattedPhone,
+            phone: document.getElementById('phone').value.trim(),
             status: document.getElementById('status').value,
             note: document.getElementById('note').value.trim()
         };
@@ -222,18 +195,16 @@
         })
         .then(res => res.json())
         .then(result => {
-            if (result.message || result.success || result.id) {
-                if (data.status === 'Opraveno - připraveno k vyzvednutí' && formattedPhone !== '') {
-                    triggerNotifyModal(formattedPhone, data.spz, data.model);
+            if (result.message) {
+                if (data.status === 'Opraveno - připraveno k vyzvednutí' && data.phone !== '') {
+                    triggerNotifyModal(data.phone, data.spz, data.model);
                 }
-                document.getElementById('vehicleForm').reset();
-                document.getElementById('phone').value = '';
+                document.getElementById('vehicleForm'].reset();
                 document.getElementById('formTitle').innerText = 'Přidat vozidlo';
                 document.getElementById('formModeIndicator').innerText = 'Režim: Přidání';
                 loadVehicles();
             }
-        })
-        .catch(err => console.error("Chyba při ukládání:", err));
+        });
     });
 
     function deleteCar(id) {
