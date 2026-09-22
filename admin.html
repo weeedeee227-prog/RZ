@@ -35,8 +35,9 @@
         .btn-action { padding: 10px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold; flex: 1; cursor: pointer; }
         .btn-edit { background: #ffc107; color: #000; }
         .btn-delete { background: #dc3545; color: #fff; }
-        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .logout-btn { background: #6c757d; color: white; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+        .top-nav { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 12px; gap: 6px; flex-wrap: wrap; }
+        .nav-btn { background: #6c757d; color: white; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 12px; border: none; cursor: pointer; font-weight: bold; }
+        .update-btn { background: #17a2b8; }
 
         #notifyModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; }
         .modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center; }
@@ -45,12 +46,16 @@
 <body>
 
 <div class="container">
+    <!-- Horní lišta: Vlevo tlačítko aktualizace a hlavní stránka -->
     <div class="top-nav">
-        <a href="/" class="logout-btn">← Hlavní stránka</a>
-        <span id="formModeIndicator" style="font-size: 12px; color: #666; font-weight: bold;">Režim: Přidání</span>
+        <button onclick="forceUpdateApp()" class="nav-btn update-btn">🔄 Aktualizovat</button>
+        <a href="/" class="nav-btn">← Hlavní stránka</a>
     </div>
     
-    <h1>Pofel Garage Admin</h1>
+    <div style="text-align: center; margin-bottom: 15px;">
+        <h1 style="margin: 0; font-size: 20px;">Pofel Garage Admin</h1>
+        <span id="formModeIndicator" style="font-size: 12px; color: #666; font-weight: bold;">Režim: Přidání</span>
+    </div>
 
     <div class="form-container">
         <h2 id="formTitle">Přidat vozidlo</h2>
@@ -86,6 +91,11 @@
 
     <h2>Seznam vozidel</h2>
     <div id="carListContainer" class="car-list"></div>
+
+    <!-- Verze uprostřed dole -->
+    <div style="text-align: center; margin-top: 25px; margin-bottom: 10px;">
+        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v1.4</span>
+    </div>
 </div>
 
 <div id="notifyModal">
@@ -99,6 +109,21 @@
 </div>
 
 <script>
+    function forceUpdateApp() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(registrations => {
+                for (let reg of registrations) { reg.unregister(); }
+            });
+        }
+        if ('caches' in window) {
+            caches.keys().then(names => {
+                for (let name of names) { caches.delete(name); }
+            });
+        }
+        alert('Mezipaměť vyčištěna. Načítám verzi v1.4...');
+        window.location.reload(true);
+    }
+
     function loadVehicles() {
         fetch('/api/admin/vehicles')
             .then(res => res.json())
@@ -165,7 +190,7 @@
         const data = {
             spz: document.getElementById('spz').value.trim(),
             model: document.getElementById('model').value.trim(),
-            phone: document.getElementById('phone'].value.trim(),
+            phone: document.getElementById('phone').value.trim(),
             status: document.getElementById('status').value,
             note: document.getElementById('note').value.trim()
         };
@@ -189,7 +214,6 @@
         });
     });
 
-    function deleteCard(id) {} // fix for typo if any
     function deleteCar(id) {
         if (!confirm('Smazat?')) return;
         fetch('/api/admin/vehicles/' + id, { method: 'DELETE' }).then(() => loadVehicles());
