@@ -27,18 +27,17 @@ db.serialize(() => {
         updated_by TEXT
     )`);
 
-    // Tabulka povolených uživatelů včetně hesel
+    // Tabulka uživatelů pro mechaniky
     db.run(`CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL
     )`, () => {
-        // Vložení výchozích uživatelů StSi a DeLi, pokud je tabulka prázdná
         db.get("SELECT COUNT(*) as count FROM users", (err, row) => {
             if (row && row.count === 0) {
                 db.run("INSERT INTO users (username, password) VALUES ('StSi', 'Stsi3103*')");
                 db.run("INSERT INTO users (username, password) VALUES ('DeLi', 'Deli3103*')");
-                console.log('Vytvořeni výchozí uživatelé: StSi, DeLi');
+                console.log('Vytvořeni uživatelé: StSi, DeLi');
             }
         });
     });
@@ -46,7 +45,7 @@ db.serialize(() => {
 
 // --- API ENDPOINTY ---
 
-// Ověření a přihlášení uživatele (jméno + heslo)
+// Přihlášení pro mechaniky
 app.post('/api/login', (req, res) => {
     let { username, password } = req.body;
     if (!username || !password) {
@@ -56,7 +55,7 @@ app.post('/api/login', (req, res) => {
     db.get("SELECT * FROM users WHERE username = ? AND password = ?", [username.trim(), password], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) {
-            return res.status(401).json({ error: 'Nesprávné uživatelské jméno nebo heslo.' });
+            return res.status(401).json({ error: 'Nesprávné jméno nebo heslo.' });
         }
         res.json({ message: 'Přihlášení úspěšné', username: row.username });
     });
@@ -80,7 +79,7 @@ app.post('/api/vehicles', (req, res) => {
 
     spz = spz.trim().toUpperCase();
     phone = phone.trim();
-    const shortUser = user ? user.trim() : 'admin';
+    const shortUser = user ? user.trim() : 'mechanik';
     const cleanNote = note || '';
 
     const query = `
@@ -109,7 +108,7 @@ app.delete('/api/vehicles/:id', (req, res) => {
     });
 });
 
-// --- PWA MANIFEST A SERVICE WORKER PRO ANDROID ---
+// --- PWA MANIFEST A SERVICE WORKER ---
 app.get('/manifest.json', (req, res) => {
     res.json({
         name: "Autoservis Registr Vozidel",
@@ -125,33 +124,105 @@ app.get('/manifest.json', (req, res) => {
 app.get('/sw.js', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript');
     res.send(`
-        self.addEventListener('install', (e) => {
-            self.skipWaiting();
-        });
-        self.addEventListener('activate', (e) => {
-            e.waitUntil(clients.claim());
-        });
-        self.addEventListener('fetch', (e) => {
-            e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-        });
+        self.addEventListener('install', (e) => { self.skipWaiting(); });
+        self.addEventListener('activate', (e) => { e.waitUntil(clients.claim()); });
+        self.addEventListener('fetch', (e) => { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); });
     `);
 });
 
-// --- FRONTEND (HTML / CSS / JS) ---
+// --- FRONTEND: KLIENTSKÉ ROZHRANÍ ( / ) - VYHLEDÁVÁNÍ PODLE SPZ ---
 app.get('/', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Autoservis - Registr Vozidel</title>
+    <title>Autoservis - Stav vozidla</title>
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2563eb">
+    <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
+    <style>
+        :root { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); border: 1px solid #334155; }
+        input, button { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 16px; }
+        button { background: #2563eb; color: white; border: none; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #1d4ed8; }
+        .actions a { display: inline-block; padding: 10px 16px; margin-top: 10px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 14px; text-align: center; }
+        .btn-call { background: #16a34a; color: white; }
+        .badge { display: inline-block; padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; background: #334155; margin-top: 10px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .admin-link { color: #38bdf8; text-decoration: none; font-size: 14px; }
+        .info-text { color: #94a3b8; font-size: 14px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h2>🚗 Zjištění stavu vozidla</h2>
+            <a href="/admin.html" class="admin-link">🔒 Mechanici</a>
+        </div>
+
+        <div class="card">
+            <h3>Zadejte SPZ vašeho vozidla</h3>
+            <p class="info-text">Zadejte registrační značku (např. 1AB2345) pro zobrazení aktuálního stavu opravy.</p>
+            <form id="search-form">
+                <input type="text" id="search-spz" placeholder="SPZ vozidla" required style="text-transform: uppercase;">
+                <button type="submit">Zobrazit stav</button>
+            </form>
+        </div>
+
+        <div id="result-container"></div>
+    </div>
+
     <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js');
-        }
+        document.getElementById('search-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const querySpz = document.getElementById('search-spz').value.trim().toUpperCase();
+            const resultEl = document.getElementById('result-container');
+            resultEl.innerHTML = '<p style="color: #94a3b8; text-align: center;">Hledám vozidlo...</p>';
+
+            try {
+                const res = await fetch('/api/vehicles');
+                const vehicles = await res.json();
+                
+                const vehicle = vehicles.find(v => v.spz.toUpperCase() === querySpz);
+
+                if (!vehicle) {
+                    resultEl.innerHTML = '<div class="card" style="border-color: #dc2626;"><p style="color: #f87171; margin: 0;">Vozidlo s SPZ <strong>' + querySpz + '</strong> nebolo v databáze servisu nalezeno.</p></div>';
+                    return;
+                }
+
+                resultEl.innerHTML = \`
+                    <div class="card" style="border-color: #2563eb;">
+                        <h3 style="margin: 0 0 10px 0;">Vozidlo: \${vehicle.spz} (\${vehicle.model})</h3>
+                        <p style="margin: 5px 0; color: #cbd5e1;">Aktuální stav:</p>
+                        <div><span class="badge" style="background: #1e40af; color: #bfdbfe; font-size: 16px;">\${vehicle.status}</span></div>
+                        \${vehicle.note ? \`<p style="margin: 15px 0 5px 0; color: #cbd5e1;"><strong>Poznámka servisu:</strong> \${vehicle.note}</p>\` : ''}
+                        <div style="margin-top: 20px;">
+                            <a href="tel:\${vehicle.phone}" class="btn-call">📞 Zavolat do servisu</a>
+                        </div>
+                    </div>
+                \`;
+            } catch (err) {
+                resultEl.innerHTML = '<div class="card"><p style="color: #f87171;">Chyba při komunikaci se serverem.</p></div>';
+            }
+        });
     </script>
+</body>
+</html>`);
+});
+
+// --- FRONTEND: MECHANICKÉ ROZHRANÍ ( /admin.html ) ---
+app.get('/admin.html', (req, res) => {
+    res.send(`<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autoservis - Administrace</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2563eb">
     <style>
         :root { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 0; }
         .container { max-width: 800px; margin: 0 auto; padding: 20px; }
@@ -168,31 +239,33 @@ app.get('/', (req, res) => {
         .hidden { display: none !important; }
         .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; background: #334155; }
         .error-msg { color: #f87171; font-size: 14px; margin-top: 5px; }
+        .back-link { color: #38bdf8; text-decoration: none; font-size: 14px; display: inline-block; margin-bottom: 15px; }
     </style>
 </head>
 <body>
     <div class="container">
+        <a href="/" class="back-link">← Zpět na zjištění stavu (klient)</a>
+
         <!-- PŘIHLAŠOVACÍ FORMULÁŘ -->
         <div id="login-screen" class="card">
-            <h2>Přihlášení do systému</h2>
-            <p style="color: #94a3b8; font-size: 14px;">Zadejte své přihlašovací údaje:</p>
+            <h2>Přihlášení pro mechaniky</h2>
+            <p style="color: #94a3b8; font-size: 14px;">Zadejte své přihlašovací údaje (StSi / DeLi):</p>
             <form id="login-form">
-                <input type="text" id="login-user" placeholder="Uživatelské jméno (např. StSi)" required autocomplete="off">
+                <input type="text" id="login-user" placeholder="Uživatelské jméno" required autocomplete="off">
                 <input type="password" id="login-pass" placeholder="Heslo" required>
-                <button type="submit">Vstoupit do aplikace</button>
+                <button type="submit">Vstoupit do administrace</button>
                 <div id="login-error" class="error-msg"></div>
             </form>
         </div>
 
-        <!-- HLAVNÍ APLIKACE -->
+        <!-- HLAVNÍ ADMIN APLIKACE -->
         <div id="app-screen" class="hidden">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2>Registr vozidel (<span id="user-display" style="color: #38bdf8;"></span>)</h2>
+                <h2>Administrace vozidel (<span id="user-display" style="color: #38bdf8;"></span>)</h2>
                 <button onclick="logout()" style="width: auto; padding: 6px 12px; background: #475569;">Odhlásit</button>
             </div>
 
-            <!-- FORMULÁŘ PRO SPRÁVU VOZIDEL -->
-            <div id="vehicle-form-section" class="card">
+            <div class="card">
                 <h3>Přidat / Upravit vozidlo</h3>
                 <form id="vehicle-form">
                     <div class="grid">
@@ -213,8 +286,7 @@ app.get('/', (req, res) => {
                 </form>
             </div>
 
-            <!-- SEZNAM KARET VOZIDEL -->
-            <h3>Aktuální vozidla v databance</h3>
+            <h3>Registr vozidel</h3>
             <div id="vehicles-list">Načítání...</div>
         </div>
     </div>
@@ -222,7 +294,6 @@ app.get('/', (req, res) => {
     <script>
         let currentUser = null;
 
-        // Kontrola přihlášení přes backend API (jméno + heslo)
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const userInput = document.getElementById('login-user').value.trim();
@@ -236,19 +307,15 @@ app.get('/', (req, res) => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username: userInput, password: passInput })
                 });
-
                 const data = await res.json();
-
                 if (!res.ok) {
                     errorEl.innerText = data.error || 'Přihlášení selhalo.';
                     return;
                 }
-
                 currentUser = data.username;
                 document.getElementById('user-display').innerText = currentUser;
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('app-screen').classList.remove('hidden');
-
                 loadVehicles();
             } catch (err) {
                 errorEl.innerText = 'Chyba připojení k serveru.';
@@ -264,7 +331,6 @@ app.get('/', (req, res) => {
             document.getElementById('login-screen').classList.remove('hidden');
         }
 
-        // Odeslání formuláře vozidla
         document.getElementById('vehicle-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const data = {
@@ -275,34 +341,29 @@ app.get('/', (req, res) => {
                 note: document.getElementById('note').value,
                 user: currentUser
             };
-
             const res = await fetch('/api/vehicles', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
-
             if (res.ok) {
                 document.getElementById('vehicle-form').reset();
                 loadVehicles();
-                showNotification('Změna v registru', 'Vozidlo bylo úspěšně přidáno nebo upraveno.');
+                showNotification('Změna v registru', 'Vozidlo bylo úspěšně uloženo.');
             } else {
                 const err = await res.json();
                 alert('Chyba: ' + err.error);
             }
         });
 
-        // Načtení vozidel do karet
         async function loadVehicles() {
             const res = await fetch('/api/vehicles');
             const vehicles = await res.json();
             const listEl = document.getElementById('vehicles-list');
-
             if (vehicles.length === 0) {
                 listEl.innerHTML = '<p style="color: #94a3b8;">Žádná vozidla v databázi.</p>';
                 return;
             }
-
             listEl.innerHTML = vehicles.map(v => \`
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -327,20 +388,17 @@ app.get('/', (req, res) => {
             const res = await fetch('/api/vehicles/' + id, { method: 'DELETE' });
             if (res.ok) {
                 loadVehicles();
-                showNotification('Vozidlo smazáno', 'Záznam byl odstraněn z registru.');
+                showNotification('Vozidlo smazáno', 'Záznam byl odstraněn.');
             }
         }
 
-        // Lokální notifikace
         function showNotification(title, body) {
             if (!('Notification' in window)) return;
             if (Notification.permission === 'granted') {
                 new Notification(title, { body: body });
             } else if (Notification.permission !== 'denied') {
                 Notification.requestPermission().then(permission => {
-                    if (permission === 'granted') {
-                        new Notification(title, { body: body });
-                    }
+                    if (permission === 'granted') new Notification(title, { body: body });
                 });
             }
         }
