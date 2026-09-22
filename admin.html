@@ -35,7 +35,7 @@
         .btn-action { padding: 10px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold; flex: 1; cursor: pointer; }
         .btn-edit { background: #ffc107; color: #000; }
         .btn-delete { background: #dc3545; color: #fff; }
-        .top-nav { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 12px; gap: 6px; flex-wrap: wrap; }
+        .top-nav { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 12px; }
         .nav-btn { background: #6c757d; color: white; text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 12px; border: none; cursor: pointer; font-weight: bold; }
         .update-btn { background: #17a2b8; }
 
@@ -46,9 +46,9 @@
 <body>
 
 <div class="container">
+    <!-- Horní lišta: Pouze tlačítko aktualizace vlevo -->
     <div class="top-nav">
         <button onclick="forceUpdateApp()" class="nav-btn update-btn">🔄 Aktualizovat</button>
-        <a href="/" class="nav-btn">← Hlavní stránka</a>
     </div>
     
     <div style="text-align: center; margin-bottom: 15px;">
