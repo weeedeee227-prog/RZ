@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
 
-    <link rel="manifest" href="/manifest.json?v=2.7">
+    <link rel="manifest" href="/manifest.json?v=2.8">
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="apple-touch-icon" href="/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -92,7 +92,7 @@
     <div id="carListContainer" class="car-list"></div>
 
     <div style="text-align: center; margin-top: 25px; margin-bottom: 10px;">
-        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v2.7</span>
+        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v2.8</span>
     </div>
 </div>
 
@@ -145,7 +145,8 @@
                     const safeModel = (car.model || '').replace(/'/g, "\\'");
                     const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
                     
-                    const rawPhone = (car.phone && car.phone !== 'null' && car.phone !== 'undefined') ? String(car.phone) : '';
+                    const dbPhone = car.phone || car.telefon || '';
+                    const rawPhone = (dbPhone && dbPhone !== 'null' && dbPhone !== 'undefined') ? String(dbPhone) : '';
                     const safePhone = rawPhone.replace(/'/g, "\\'");
 
                     container.innerHTML += `
@@ -156,7 +157,7 @@
                             </div>
                             <div class="car-body">
                                 <div class="car-row"><strong>Stav:</strong> <span style="color:#0066cc;">${car.status}</span></div>
-                                <div class="car-row"><strong>Telefon:</strong> ${rawPhone ? `<a href="tel:${rawPhone}">${rawPhone}</a>` : '-'}</div>
+                                <div class="car-row"><strong>Telefon:</strong> ${rawPhone ? `<a href="tel:${rawPhone}" onclick="event.stopPropagation()">${rawPhone}</a>` : '-'}</div>
                                 <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
                                 <div class="car-meta">
                                     <div>Zapsal: <strong>${car.created_by || '-'}</strong></div>
@@ -205,8 +206,9 @@
 
         const data = {
             spz: document.getElementById('spz').value.trim(),
-            model: document.getElementById('model').value.trim(),
+            model: document.getElementById('model'].value.trim(), // opraveno
             phone: formattedPhone,
+            telefon: formattedPhone, // pojištění pro backend
             status: document.getElementById('status').value,
             note: document.getElementById('note').value.trim()
         };
