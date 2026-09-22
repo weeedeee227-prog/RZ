@@ -1,10 +1,12 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const cookieParser = require('cookie-parser'); // Pro snadné čtení přihlášení
 
 const app = express();
 app.use(express.json());
-app.use(express.static('.'));
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Připojení k SQLite databázi
 const db = new sqlite3.Database('./servis.db', (err) => {
@@ -27,7 +29,6 @@ db.serialize(() => {
         username TEXT PRIMARY KEY,
         password TEXT NOT NULL
     )`, () => {
-        // Vložení nebo aktualizace obou uživatelů při startu
         const defaultUsers = [
             ['StepanSigmund', '62612Alfa'],
             ['DenisLiulic', 'pofelsibro3103']
@@ -39,59 +40,71 @@ db.serialize(() => {
     });
 });
 
-// Middleware pro ověření uživatele podle databáze
-function checkAuth(req, res, next) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-        res.setHeader('WWW-Authenticate', 'Basic realm="Zabezpečená administrace servisu"');
-        return res.status(401).json({ error: 'Neautorizovaný přístup' });
+// Middleware pro kontrolu přihlášení přes cookie
+function requireLogin(req, res, next) {
+    const user = req.cookies.logged_user;
+    if (!user) {
+        // Pokud není přihlášený, pošleme mu hezkou přihlašovací stránku
+        return res.send(`
+            <!DOCTYPE html>
+            <html lang="cs">
+            <head>
+                <meta charset="UTF-8">
+                <title>Přihlášení do servisu</title>
+                <style>
+                    body { font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                    .login-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 300px; }
+                    h2 { margin-top: 0; color: #333; text-align: center; }
+                    input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+                    button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+                    button:hover { background: #0056b3; }
+                    .error { color: red; font-size: 14px; text-align: center; }
+                </style>
+            </head>
+            <body>
+                <div class="login-card">
+                    <h2>Pofel Garage</h2>
+                    <form method="POST" action="/api/login">
+                        <input type="text" name="username" placeholder="Uživatelské jméno" required>
+                        <input type="password" name="password" placeholder="Heslo" required>
+                        <button type="submit">Přihlásit se</button>
+                    </form>
+                </div>
+            </body>
+            </html>
+        `);
     }
-
-    const auth = Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(':');
-    const username = auth[0];
-    const password = auth[1];
-
-    db.get(`SELECT * FROM users WHERE username = ? AND password = ?`, [username, password], (err, row) => {
-        if (err || !row) {
-            res.setHeader('WWW-Authenticate', 'Basic realm="Zabezpečená administrace servisu"');
-            return res.status(401).json({ error: 'Nesprávné jméno nebo heslo' });
-        }
-        next();
-    });
+    next();
 }
 
-// Stránka pro zákazníka (index.html) - veřejná
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// Zákaznické API pro vyhledávání stavu podle SPZ - veřejné
-app.get('/api/status/:spz', (req, res) => {
-    const spz = req.params.spz.replace(/\s+/g, '').toUpperCase();
-
-    db.get(`SELECT * FROM vehicles WHERE REPLACE(spz, ' ', '') = ?`, [spz], (err, row) => {
-        if (err) return res.status(500).json({ error: 'Chyba databáze' });
-        if (!row) return res.status(404).json({ error: 'Vozidlo s touto SPZ nebylo nalezeno.' });
-        res.json(row);
+// Zpracování přihlášení
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    db.get(`SELECT * FROM users WHERE username = ? AND password = ?`, [username, password], (err, row) => {
+        if (err || !row) {
+            return res.send(`<script>alert('Nesprávné jméno nebo heslo!'); window.location='/admin.html';</script>`);
+        }
+        // Nastavíme cookie a pošleme do administrace
+        res.cookie('logged_user', row.username, { httpOnly: true, maxAge: 86400000 }); // platí 1 den
+        res.redirect('/admin.html');
     });
 });
 
 // ==========================================
-// ZABEZPEČENÉ ADMIN ROUTY (Vyžadují přihlášení)
+// ZABEZPEČENÉ ADMIN ROUTY
 // ==========================================
-
-app.get('/admin.html', checkAuth, (req, res) => {
+app.get('/admin.html', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
-app.get('/api/admin/vehicles', checkAuth, (req, res) => {
+app.get('/api/admin/vehicles', requireLogin, (req, res) => {
     db.all(`SELECT * FROM vehicles ORDER BY updated_at DESC`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: 'Chyba databáze' });
         res.json(rows);
     });
 });
 
-app.post('/api/admin/vehicles', checkAuth, (req, res) => {
+app.post('/api/admin/vehicles', requireLogin, (req, res) => {
     const { spz, model, status, note } = req.body;
     if (!spz || !model || !status) {
         return res.status(400).json({ error: 'Vyplňte SPZ, model a stav.' });
@@ -113,10 +126,29 @@ app.post('/api/admin/vehicles', checkAuth, (req, res) => {
     });
 });
 
-app.delete('/api/admin/vehicles/:id', checkAuth, (req, res) => {
+app.delete('/api/admin/vehicles/:id', requireLogin, (req, res) => {
     db.run(`DELETE FROM vehicles WHERE id = ?`, [req.params.id], function(err) {
         if (err) return res.status(500).json({ error: 'Chyba při mazání' });
         res.json({ message: 'Smazáno' });
+    });
+});
+
+// ==========================================
+// VEŘEJNÉ SOUBORY A WEBY
+// ==========================================
+app.use(express.static('.'));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/api/status/:spz', (req, res) => {
+    const spz = req.params.spz.replace(/\s+/g, '').toUpperCase();
+
+    db.get(`SELECT * FROM vehicles WHERE REPLACE(spz, ' ', '') = ?`, [spz], (err, row) => {
+        if (err) return res.status(500).json({ error: 'Chyba databáze' });
+        if (!row) return res.status(404).json({ error: 'Vozidlo s touto SPZ nebylo nalezeno.' });
+        res.json(row);
     });
 });
 
