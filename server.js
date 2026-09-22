@@ -8,6 +8,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Povolení servírování statických souborů z kořenové složky (zde se najde i favicon.jpg)
+app.use(express.static(path.join(__dirname)));
+
 // --- DATABÁZE ---
 const db = new sqlite3.Database('./database.sqlite', (err) => {
     if (err) console.error('Chyba DB:', err.message);
@@ -108,7 +111,7 @@ app.delete('/api/vehicles/:id', (req, res) => {
     });
 });
 
-// --- PWA MANIFEST (S IKONOU PRO INSTALACI) ---
+// --- PWA MANIFEST ---
 app.get('/manifest.json', (req, res) => {
     res.json({
         name: "Autoservis - Registr Vozidel",
@@ -119,10 +122,9 @@ app.get('/manifest.json', (req, res) => {
         theme_color: "#2563eb",
         icons: [
             {
-                src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'%3E%3Cpath d='M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.22.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.85 7h10.29l1.04 3H5.81l1.04-3zM19 17H5v-4.66l.12-.34h13.76l.12.34V17z'/%3E%3C/svg%3E",
+                src: "/favicon.jpg",
                 sizes: "192x192 512x512",
-                type: "image/svg+xml",
-                purpose: "any maskable"
+                type: "image/jpeg"
             }
         ]
     });
@@ -146,6 +148,7 @@ app.get('/', (req, res) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Autoservis - Stav vozidla</title>
+    <link rel="icon" type="image/jpeg" href="/favicon.jpg">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2563eb">
     <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
@@ -229,6 +232,7 @@ app.get('/admin.html', (req, res) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Autoservis - Administrace</title>
+    <link rel="icon" type="image/jpeg" href="/favicon.jpg">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2563eb">
     <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
@@ -303,7 +307,6 @@ app.get('/admin.html', (req, res) => {
     <script>
         let currentUser = null;
 
-        document.getElementById('login-form').getElementById = document.getElementById('login-form'); // safety
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const userInput = document.getElementById('login-user').value.trim();
@@ -345,7 +348,7 @@ app.get('/admin.html', (req, res) => {
             e.preventDefault();
             const data = {
                 spz: document.getElementById('spz').value,
-                model: document.getElementById('model'].value,
+                model: document.getElementById('model').value,
                 status: document.getElementById('status').value,
                 phone: document.getElementById('phone').value,
                 note: document.getElementById('note').value,
