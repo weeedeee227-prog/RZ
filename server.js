@@ -204,7 +204,7 @@ app.get('/', (req, res) => {
                         <div><span class="badge" style="background: #1e40af; color: #bfdbfe; font-size: 16px;">\${vehicle.status}</span></div>
                         \${vehicle.note ? \`<p style="margin: 15px 0 5px 0; color: #cbd5e1;"><strong>Poznámka servisu:</strong> \${vehicle.note}</p>\` : ''}
                         <div style="margin-top: 20px;">
-                            <a href="tel:\${vehicle.phone}" class="btn-call">📞 Zavolat do servisu</a>
+                            <a href="tel:+420601551770" class="btn-call">📞 Zavolat do servisu</a>
                         </div>
                     </div>
                 \`;
