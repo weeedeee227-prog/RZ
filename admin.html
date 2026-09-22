@@ -2,6 +2,9 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pofel Garage - Administrace</title>
     <style>
@@ -91,7 +94,7 @@
     <div id="carListContainer" class="car-list"></div>
 
     <div style="text-align: center; margin-top: 25px; margin-bottom: 10px;">
-        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v1.6</span>
+        <span style="font-size: 11px; color: #888; background: #eee; padding: 4px 12px; border-radius: 4px; font-weight: bold;">v1.8</span>
     </div>
 </div>
 
@@ -112,16 +115,14 @@
                 for (let reg of registrations) { reg.unregister(); }
             });
         }
-        alert('Mezipaměť aplikace vyčištěna. Načítám nejnovější verzi v1.6...');
+        alert('Mezipaměť aplikace vyčištěna. Načítám nejnovější verzi v1.8...');
         window.location.reload(true);
     }
 
-    // Automatické doplnění +420 při odeslání
     function formatPhoneNumber(rawPhone) {
         if (!rawPhone) return '';
         let cleaned = rawPhone.replace(/\s+/g, '').trim();
         if (cleaned === '') return '';
-        
         if (cleaned.startsWith('+')) {
             return cleaned;
         }
@@ -131,9 +132,8 @@
         return cleaned;
     }
 
-    // Odstranění +420 při vkládání do formuláře pro úpravy, aby uživatel viděl čisté číslo
     function cleanPhoneForInput(phone) {
-        if (!phone || phone === 'undefined') return '';
+        if (!phone || phone === 'undefined' || phone === 'null') return '';
         if (phone.startsWith('+420')) {
             return phone.substring(4);
         }
@@ -150,7 +150,8 @@
                 cars.forEach(car => {
                     const safeModel = (car.model || '').replace(/'/g, "\\'");
                     const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
-                    const safePhone = (car.phone || '').replace(/'/g, "\\'");
+                    const rawPhoneVal = car.phone || '';
+                    const safePhone = rawPhoneVal.replace(/'/g, "\\'");
 
                     container.innerHTML += `
                         <div class="car-card" id="card-${car.id}">
@@ -160,7 +161,7 @@
                             </div>
                             <div class="car-body">
                                 <div class="car-row"><strong>Stav:</strong> <span style="color:#0066cc;">${car.status}</span></div>
-                                <div class="car-row"><strong>Telefon:</strong> ${car.phone ? `<a href="tel:${car.phone}">${car.phone}</a>` : '-'}</div>
+                                <div class="car-row"><strong>Telefon:</strong> ${rawPhoneVal ? `<a href="tel:${rawPhoneVal}">${rawPhoneVal}</a>` : '-'}</div>
                                 <div class="car-row"><strong>Poznámka:</strong> ${car.note || '-'}</div>
                                 <div class="car-meta">
                                     <div>Zapsal: <strong>${car.created_by || '-'}</strong></div>
@@ -211,7 +212,7 @@
             spz: document.getElementById('spz').value.trim(),
             model: document.getElementById('model').value.trim(),
             phone: formattedPhone,
-            status: document.getElementById('status').value,
+            status: document.getElementById('status'].value,
             note: document.getElementById('note').value.trim()
         };
 
@@ -227,6 +228,7 @@
                     triggerNotifyModal(data.phone, data.spz, data.model);
                 }
                 document.getElementById('vehicleForm').reset();
+                document.getElementById('phone').value = '';
                 document.getElementById('formTitle').innerText = 'Přidat vozidlo';
                 document.getElementById('formModeIndicator').innerText = 'Režim: Přidání';
                 loadVehicles();
