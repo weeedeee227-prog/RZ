@@ -1,7 +1,7 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const cookieParser = require('cookie-parser'); // Pro snadné čtení přihlášení
+const cookieParser = require('cookie-parser');
 
 const app = express();
 app.use(express.json());
@@ -14,7 +14,7 @@ const db = new sqlite3.Database('./servis.db', (err) => {
     else console.log('Připojeno k SQLite databázi.');
 });
 
-// Vytvoření tabulek pro vozidla a uživatele
+// Vytvoření tabulek s novými sloupci pro logování uživatelů
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS vehicles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,6 +22,8 @@ db.serialize(() => {
         model TEXT NOT NULL,
         status TEXT NOT NULL,
         note TEXT,
+        created_by TEXT,
+        updated_by TEXT,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
@@ -40,11 +42,10 @@ db.serialize(() => {
     });
 });
 
-// Middleware pro kontrolu přihlášení přes cookie
+// Middleware pro kontrolu přihlášení
 function requireLogin(req, res, next) {
     const user = req.cookies.logged_user;
     if (!user) {
-        // Pokud není přihlášený, pošleme mu hezkou přihlašovací stránku
         return res.send(`
             <!DOCTYPE html>
             <html lang="cs">
@@ -58,7 +59,6 @@ function requireLogin(req, res, next) {
                     input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
                     button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
                     button:hover { background: #0056b3; }
-                    .error { color: red; font-size: 14px; text-align: center; }
                 </style>
             </head>
             <body>
@@ -77,15 +77,13 @@ function requireLogin(req, res, next) {
     next();
 }
 
-// Zpracování přihlášení
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
     db.get(`SELECT * FROM users WHERE username = ? AND password = ?`, [username, password], (err, row) => {
         if (err || !row) {
             return res.send(`<script>alert('Nesprávné jméno nebo heslo!'); window.location='/admin.html';</script>`);
         }
-        // Nastavíme cookie a pošleme do administrace
-        res.cookie('logged_user', row.username, { httpOnly: true, maxAge: 86400000 }); // platí 1 den
+        res.cookie('logged_user', row.username, { httpOnly: true, maxAge: 86400000 });
         res.redirect('/admin.html');
     });
 });
@@ -106,23 +104,33 @@ app.get('/api/admin/vehicles', requireLogin, (req, res) => {
 
 app.post('/api/admin/vehicles', requireLogin, (req, res) => {
     const { spz, model, status, note } = req.body;
+    const currentUser = req.cookies.logged_user; // Kdo akci provádí
+
     if (!spz || !model || !status) {
         return res.status(400).json({ error: 'Vyplňte SPZ, model a stav.' });
     }
 
     const cleanSpz = spz.trim().toUpperCase();
 
-    const sql = `INSERT INTO vehicles (spz, model, status, note, updated_at) 
-                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                 ON CONFLICT(spz) DO UPDATE SET 
-                    model = excluded.model,
-                    status = excluded.status,
-                    note = excluded.note,
-                    updated_at = CURRENT_TIMESTAMP`;
+    // Nejprve zjistíme, jestli vozidlo už existuje, abychom zachovali původního tvůrce (created_by)
+    db.get(`SELECT created_by FROM vehicles WHERE spz = ?`, [cleanSpz], (err, existingRow) => {
+        if (err) return res.status(500).json({ error: 'Chyba databáze' });
 
-    db.run(sql, [cleanSpz, model, status, note || ''], function(err) {
-        if (err) return res.status(500).json({ error: 'Chyba při ukládání' });
-        res.json({ message: 'Uloženo úspěšně' });
+        const creator = existingRow ? existingRow.created_by : currentUser;
+
+        const sql = `INSERT INTO vehicles (spz, model, status, note, created_by, updated_by, updated_at) 
+                     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                     ON CONFLICT(spz) DO UPDATE SET 
+                        model = excluded.model,
+                        status = excluded.status,
+                        note = excluded.note,
+                        updated_by = excluded.updated_by,
+                        updated_at = CURRENT_TIMESTAMP`;
+
+        db.run(sql, [cleanSpz, model, status, note || '', creator, currentUser], function(err) {
+            if (err) return res.status(500).json({ error: 'Chyba při ukládání' });
+            res.json({ message: 'Uloženo úspěšně' });
+        });
     });
 });
 
