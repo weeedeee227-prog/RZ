@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P&R MONT - Správa uživatelů</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 16px; color: #333; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { font-size: 20px; text-align: center; margin-top: 0; color: #0066cc; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 13px; color: #555; }
+        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; }
+        .btn { background: #0066cc; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; font-weight: bold; text-align: center; display: inline-block; text-decoration: none; }
+        .btn:active { background: #004d99; }
+        .user-list { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+        .user-item { background: #fafafa; border: 1px solid #d1d5db; padding: 10px 14px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+        .back-link { display: block; text-align: center; margin-top: 15px; color: #666; text-decoration: none; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Správa uživatelů</h1>
+    
+    <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; border: 1px solid #e1e4e8; margin-bottom: 20px;">
+        <h3 style="margin-top:0; font-size:15px;">Přidat nového uživatele</h3>
+        <form id="userForm" onsubmit="addUser(event)">
+            <div class="form-group">
+                <label>Kód uživatele (2+2 znaky, např. stsi):</label>
+                <input type="text" id="newUsername" required maxlength="4" style="text-transform: lowercase;">
+            </div>
+            <button type="submit" class="btn">Přidat uživatele</button>
+        </form>
+    </div>
+
+    <h3>Seznam registrovaných uživatelů</h3>
+    <div id="userList" class="user-list">Načítám...</div>
+
+    <a href="/admin.html" class="back-link">← Zpět do administrace zakázek</a>
+</div>
+
+<script>
+    function loadUsers() {
+        fetch('/api/users')
+            .then(res => res.json())
+            .then(data => {
+                const list = document.getElementById('userList');
+                if (!data || data.length === 0) {
+                    list.innerHTML = '<p style="color:#888; text-align:center;">Žádní uživatelé.</p>';
+                    return;
+                }
+                list.innerHTML = '';
+                data.forEach(user => {
+                    list.innerHTML += `
+                        <div class="user-item">
+                            <span><strong>${user.username}</strong></span>
+                            <button onclick="deleteUser('${user.username}')" style="background:#dc3545; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px;">Smazat</button>
+                        </div>
+                    `;
+                });
+            })
+            .catch(() => {
+                document.getElementById('userList').innerHTML = '<p style="color:red; text-align:center;">Chyba při načítání uživatelů.</p>';
+            });
+    }
+
+    function addUser(e) {
+        e.preventDefault();
+        const username = document.getElementById('newUsername').value.trim().toLowerCase();
+        
+        if (username.length !== 4) {
+            alert('Uživatelský kód musí mít přesně 4 znaky (formát 2+2)!');
+            return;
+        }
+
+        fetch('/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
+        })
+        .then(res => res.json())
+        .then(res => {
+            if (res.error) {
+                alert(res.error);
+                return;
+            }
+            document.getElementById('userForm').reset();
+            loadUsers();
+        });
+    }
+
+    function deleteUser(username) {
+        if (!confirm(`Opravdu smazat uživatele ${username}?`)) return;
+        fetch('/api/users/' + username, { method: 'DELETE' })
+            .then(() => loadUsers());
+    }
+
+    loadUsers();
+</script>
+</body>
+</html>
