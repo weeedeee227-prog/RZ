@@ -39,7 +39,43 @@ db.serialize(() => {
     db.run("INSERT OR IGNORE INTO users (username, password) VALUES ('DeLi', 'Deli3103*')");
 });
 
-// --- API ENDPOINTY ---
+// --- API ENDPOINTY: UŽIVATELÉ ---
+
+// Získání seznamu uživatelů
+app.get('/api/users', (req, res) => {
+    db.all("SELECT id, username FROM users", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Přidání uživatele
+app.post('/api/users', (req, res) => {
+    let { username, password } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Zadejte uživatelské jméno a heslo.' });
+    }
+    db.run("INSERT INTO users (username, password) VALUES (?, ?)", [username.trim(), password], function(err) {
+        if (err) return res.status(400).json({ error: 'Uživatel již existuje nebo došlo k chybě.' });
+        res.json({ message: 'Uživatel úspěšně vytvořen' });
+    });
+});
+
+// Smazání uživatele
+app.delete('/api/users/:id', (req, res) => {
+    const { id } = req.params;
+    db.get("SELECT username FROM users WHERE id = ?", [id], (err, row) => {
+        if (row && row.username === 'StSi') {
+            return res.status(400).json({ error: 'Hlavního administrátora StSi nelze smazat!' });
+        }
+        db.run("DELETE FROM users WHERE id = ?", [id], function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Uživatel smazán' });
+        });
+    });
+});
+
+// --- API ENDPOINTY: AUTORIZACE A VOZIDLA ---
 
 // Přihlášení pro mechaniky
 app.post('/api/login', (req, res) => {
@@ -104,7 +140,7 @@ app.delete('/api/vehicles/:id', (req, res) => {
     });
 });
 
-// --- PWA MANIFEST (S IKONOU PRO INSTALACI) ---
+// --- PWA MANIFEST ---
 app.get('/manifest.json', (req, res) => {
     res.json({
         name: "Autoservis - Registr Vozidel",
@@ -270,6 +306,19 @@ app.get('/admin.html', (req, res) => {
                 <button onclick="logout()" style="width: auto; padding: 6px 12px; background: #475569;">Odhlásit</button>
             </div>
 
+            <!-- SEKCE SPRÁVY UŽIVATELŮ (Zobrazí se POUZE pro uživatele StSi) -->
+            <div id="user-management-section" class="card hidden" style="border-color: #7c3aed;">
+                <h3>⚙️ Správa uživatelů (Admin StSi)</h3>
+                <form id="new-user-form">
+                    <div class="grid">
+                        <input type="text" id="new-username" placeholder="Nové uživatelské jméno" required autocomplete="off">
+                        <input type="password" id="new-password" placeholder="Heslo nového uživatele" required>
+                    </div>
+                    <button type="submit" style="background: #7c3aed;">Přidat nového uživatele</button>
+                </form>
+                <div id="users-list" style="margin-top: 15px;">Načítání uživatelů...</div>
+            </div>
+
             <div class="card">
                 <h3>Přidat / Upravit vozidlo</h3>
                 <form id="vehicle-form">
@@ -321,6 +370,15 @@ app.get('/admin.html', (req, res) => {
                 document.getElementById('user-display').innerText = currentUser;
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('app-screen').classList.remove('hidden');
+
+                // Zobrazení/skrytí správy uživatelů podle toho, zda je to StSi
+                if (currentUser === 'StSi') {
+                    document.getElementById('user-management-section').classList.remove('hidden');
+                    loadUsers();
+                } else {
+                    document.getElementById('user-management-section').classList.add('hidden');
+                }
+
                 loadVehicles();
             } catch (err) {
                 errorEl.innerText = 'Chyba připojení k serveru.';
@@ -334,6 +392,60 @@ app.get('/admin.html', (req, res) => {
             document.getElementById('login-error').innerText = '';
             document.getElementById('app-screen').classList.add('hidden');
             document.getElementById('login-screen').classList.remove('hidden');
+        }
+
+        // Správa uživatelů (pro StSi)
+        async function loadUsers() {
+            try {
+                const res = await fetch('/api/users');
+                const users = await res.json();
+                const listEl = document.getElementById('users-list');
+                if (users.length === 0) {
+                    listEl.innerHTML = '<p style="color: #94a3b8;">Žádní uživatelé v databázi.</p>';
+                    return;
+                }
+                listEl.innerHTML = users.map(u => \`
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #0f172a; padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; border: 1px solid #334155;">
+                        <span>👤 <strong>\${u.username}</strong></span>
+                        \${u.username !== 'StSi' ? \`<button onclick="deleteUser(\${u.id})" class="danger" style="width: auto; padding: 4px 8px; margin: 0;">Smazat</button>\` : '<span style="font-size: 12px; color: #94a3b8;">Hlavní admin</span>'}
+                    </div>
+                \`).join('');
+            } catch (err) {
+                console.error('Chyba při načítání uživatelů');
+            }
+        }
+
+        const newUserForm = document.getElementById('new-user-form');
+        if (newUserForm) {
+            newUserForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = document.getElementById('new-username').value.trim();
+                const password = document.getElementById('new-password').value;
+                const res = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                if (res.ok) {
+                    document.getElementById('new-user-form').reset();
+                    loadUsers();
+                    alert('Uživatel úspěšně vytvořen.');
+                } else {
+                    const err = await res.json();
+                    alert('Chyba: ' + err.error);
+                }
+            });
+        }
+
+        async function deleteUser(id) {
+            if (!confirm('Opravdu chcete tohoto uživatele smazat?')) return;
+            const res = await fetch('/api/users/' + id, { method: 'DELETE' });
+            if (res.ok) {
+                loadUsers();
+            } else {
+                const err = await res.json();
+                alert('Chyba: ' + err.error);
+            }
         }
 
         document.getElementById('vehicle-form').addEventListener('submit', async (e) => {
