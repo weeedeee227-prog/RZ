@@ -347,6 +347,7 @@ app.get('/admin.html', (req, res) => {
 
     <script>
         let currentUser = null;
+        let loadedVehicles = []; // Globální pole pro uložení načtených vozidel
 
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -371,7 +372,6 @@ app.get('/admin.html', (req, res) => {
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('app-screen').classList.remove('hidden');
 
-                // Zobrazení/skrytí správy uživatelů podle toho, zda je to StSi
                 if (currentUser === 'StSi') {
                     document.getElementById('user-management-section').classList.remove('hidden');
                     loadUsers();
@@ -394,7 +394,6 @@ app.get('/admin.html', (req, res) => {
             document.getElementById('login-screen').classList.remove('hidden');
         }
 
-        // Správa uživatelů (pro StSi)
         async function loadUsers() {
             try {
                 const res = await fetch('/api/users');
@@ -476,6 +475,7 @@ app.get('/admin.html', (req, res) => {
         async function loadVehicles() {
             const res = await fetch('/api/vehicles');
             const vehicles = await res.json();
+            loadedVehicles = vehicles; // Uložíme data pro funkci editace
             const listEl = document.getElementById('vehicles-list');
             if (vehicles.length === 0) {
                 listEl.innerHTML = '<p style="color: #94a3b8;">Žádná vozidla v databázi.</p>';
@@ -495,9 +495,22 @@ app.get('/admin.html', (req, res) => {
                         <a href="tel:\${v.phone}" class="btn-call">📞 Volat: \${v.phone}</a>
                         <a href="sms:\${v.phone}?body=Dobrý den, ohledně vašeho vozidla \${v.spz}..." class="btn-sms">💬 SMS</a>
                         <button onclick="deleteVehicle(\${v.id})" class="danger" style="width: auto; padding: 6px 12px; margin-top: 4px; float: right;">Smazat</button>
+                        <button onclick="editVehicle(\${v.id})" style="width: auto; padding: 6px 12px; margin-top: 4px; background: #0284c7; margin-right: 6px; float: right;">Upravit</button>
                     </div>
                 </div>
             \`).join('');
+        }
+
+        // Funkce pro naplnění formuláře daty z karty
+        function editVehicle(id) {
+            const v = loadedVehicles.find(item => item.id === id);
+            if (!v) return;
+            document.getElementById('spz').value = v.spz;
+            document.getElementById('model').value = v.model;
+            document.getElementById('status').value = v.status;
+            document.getElementById('phone').value = v.phone;
+            document.getElementById('note').value = v.note || '';
+            window.scrollTo({ top: 0, behavior: 'smooth' }); // Posun nahoru k formuláři
         }
 
         async function deleteVehicle(id) {
