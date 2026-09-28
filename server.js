@@ -77,6 +77,42 @@ app.delete('/api/users/:id', (req, res) => {
         });
     });
 });
+// Samostatná routa pro generování NFC tokenu na adrese /nfc
+app.get('/nfc', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="cs">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>P&R MONT - NFC Docházka</title>
+        </head>
+        <body style="background: #0f172a; color: #f8fafc; font-family: system-ui; text-align: center; padding-top: 20vh; margin: 0; padding-left: 20px; padding-right: 20px;">
+            <h1 style="color:#ef4444; font-size: 32px;">⛔ Přístup odepřen</h1>
+            <p style="color:#94a3b8; font-size: 16px;">Toto zařízení není v systému autorizované.</p>
+            <p style="color:#94a3b8; font-size: 14px;">Vaše zařízení má tento token pro schválení v administraci:</p>
+            
+            <div id="token-box" style="background: #1e293b; color: #38bdf8; font-family: monospace; font-size: 20px; padding: 12px; border-radius: 8px; display: inline-block; margin: 15px 0; border: 1px solid #334155; user-select: all;">
+                Načítání tokenu...
+            </div>
+
+            <script>
+                // Zjistíme, jestli už token v prohlížeči existuje
+                let token = localStorage.getItem('deviceToken');
+                
+                // Pokud neexistuje, vygenerujeme nový
+                if (!token) {
+                    token = 'dev_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                    localStorage.setItem('deviceToken', token);
+                }
+                
+                // Vypíšeme ho na obrazovku
+                document.getElementById('token-box').innerText = token;
+            </script>
+        </body>
+        </html>
+    `);
+});
 
 // --- API ENDPOINTY: AUTORIZACE A VOZIDLA ---
 
