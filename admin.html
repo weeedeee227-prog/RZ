@@ -35,6 +35,8 @@
         .btn-delete { background: #dc3545; color: #fff; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; font-size: 12px; }
 
         .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 13px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        .admin-actions { display: flex; gap: 10px; align-items: center; }
+        .btn-manage-users { background: #6f42c1; color: white; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -56,7 +58,10 @@
     <div id="mechanicView" class="hidden">
         <div class="top-nav">
             <span>Mechanik: <strong id="loggedUserDisplay"></strong></span>
-            <a href="#" onclick="logout()" style="color: #dc3545; font-weight: bold;">Odhlásit</a>
+            <div class="admin-actions">
+                <div id="adminUserManagementBtn"></div>
+                <a href="#" onclick="logout()" style="color: #dc3545; font-weight: bold;">Odhlásit</a>
+            </div>
         </div>
         <h1>Správa zakázek</h1>
 
@@ -99,6 +104,30 @@
 </div>
 
 <script>
+    // Ověření, zda má toto zařízení administrátorská práva
+document.addEventListener("DOMContentLoaded", async () => {
+    const deviceToken = localStorage.getItem('deviceToken');
+    
+    try {
+        const response = await fetch('/api/attendance/verify-admin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceToken })
+        });
+        const data = await response.json();
+
+        if (!data.isAdmin) {
+            document.body.innerHTML = `
+                <div style="text-align:center; margin-top:20vh; font-family:system-ui; color: #f8fafc; background: #0f172a; height: 100vh; padding: 20px;">
+                    <h1 style="color:#ef4444; font-size: 32px;">⛔ Přístup odepřen</h1>
+                    <p style="color:#94a3b8; font-size: 18px;">Tohle zařízení není autorizované pro správu P&R MONT.</p>
+                </div>
+            `;
+        }
+    } catch (e) {
+        console.error('Chyba ověření admin přístupu');
+    }
+});
     let currentUser = '';
     let allVehicles = [];
 
@@ -110,6 +139,16 @@
         }
         currentUser = val;
         document.getElementById('loggedUserDisplay').innerText = currentUser;
+        
+        // Zobrazení tlačítka pro správu uživatelů pouze pro StSi (zadáno malými písmeny "stsi" kvůli .toLowerCase())
+        if (currentUser === 'stsi') {
+            document.getElementById('adminUserManagementBtn').innerHTML = `
+                <a href="/manage-users" class="btn-manage-users">⚙️ Správa uživatelů</a>
+            `;
+        } else {
+            document.getElementById('adminUserManagementBtn').innerHTML = '';
+        }
+
         document.getElementById('loginView').classList.add('hidden');
         document.getElementById('mechanicView').classList.remove('hidden');
         loadData();
@@ -186,7 +225,7 @@
 
         container.innerHTML = '';
         allVehicles.forEach(car => {
-            const smsText = encodeURIComponent(`Dobrý den, vaše vozidlo (${car.spz}) je  Stav: ${car.status} děkuji.`);
+            const smsText = encodeURIComponent(`Dobrý den, vaše vozidlo (${car.spz}) je v stavu: ${car.status}. Děkuji.`);
             const safeModel = (car.model || '').replace(/'/g, "\\'");
             const safeNote = (car.note || '').replace(/'/g, "\\'").replace(/\n/g, ' ');
             
@@ -212,7 +251,7 @@
         });
     }
 
-    function editCar(spz, model, status, note, phone) {
+    function editCard(spz, model, status, note, phone) {
         document.getElementById('spz').value = spz;
         document.getElementById('model').value = model;
         document.getElementById('status').value = status;

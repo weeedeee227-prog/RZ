@@ -60,6 +60,9 @@ app.post('/api/users', (req, res) => {
         res.json({ message: 'Uživatel úspěšně vytvořen' });
     });
 });
+// Připojení modulu docházky
+const attendanceRouter = require('./attendance')(db);
+app.use('/api/attendance', attendanceRouter);
 
 // Smazání uživatele
 app.delete('/api/users/:id', (req, res) => {
