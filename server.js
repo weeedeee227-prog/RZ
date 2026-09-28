@@ -9,15 +9,12 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Složka pro nahrávání fotek
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
 app.use('/uploads', express.static(uploadDir));
-// Servíruje všechny soubory (index.html, admin.html, JS, CSS atd.) přímo z kořenové složky
 app.use(express.static(__dirname));
 
-// --- DATABÁZE ---
 const db = new sqlite3.Database('./database.sqlite', (err) => {
     if (err) console.error('Chyba DB:', err.message);
     else console.log('Připojeno k SQLite.');
@@ -80,12 +77,8 @@ db.serialize(() => {
     db.run("INSERT OR IGNORE INTO users (username, password) VALUES ('DeLi', 'Deli3103*')");
 });
 
-// --- API: UŽIVATELÉ ---
 app.get('/api/users', (req, res) => {
-    db.all("SELECT id, username FROM users", [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+    db.all("SELECT id, username FROM users", [], (err, rows) => res.json(rows));
 });
 
 app.post('/api/users', (req, res) => {
@@ -100,28 +93,23 @@ app.post('/api/users', (req, res) => {
 app.delete('/api/users/:id', (req, res) => {
     db.get("SELECT username FROM users WHERE id = ?", [req.params.id], (err, row) => {
         if (row && row.username.toLowerCase() === 'stsi') return res.status(400).json({ error: 'StSi nelze smazat!' });
-        db.run("DELETE FROM users WHERE id = ?", [req.params.id], (err) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Uživatel smazán' });
-        });
+        db.run("DELETE FROM users WHERE id = ?", [req.params.id], () => res.json({ message: 'Uživatel smazán' }));
     });
 });
 
-// --- API: DOCHÁZKA & NFC ---
 app.get('/api/attendance/devices', (req, res) => {
     db.all("SELECT * FROM devices", [], (err, rows) => res.json(rows));
 });
 
 app.post('/api/attendance/register-device', (req, res) => {
     const { deviceToken, username } = req.body;
-    db.run("INSERT OR REPLACE INTO devices (device_token, username) VALUES (?, ?)", [deviceToken.trim(), username.trim()], (err) => {
-        if (err) return res.status(500).json({ error: err.message });
+    db.run("INSERT OR REPLACE INTO devices (device_token, username) VALUES (?, ?)", [deviceToken.trim(), username.trim()], () => {
         res.json({ message: 'Zařízení registrováno' });
     });
 });
 
 app.delete('/api/attendance/devices/:token', (req, res) => {
-    db.run("DELETE FROM devices WHERE device_token = ?", [req.params.token], (err) => res.json({ message: 'Odebráno' }));
+    db.run("DELETE FROM devices WHERE device_token = ?", [req.params.token], () => res.json({ message: 'Odebráno' }));
 });
 
 app.get('/api/attendance/latest', (req, res) => {
@@ -169,7 +157,6 @@ app.get('/calendar.ics', (req, res) => {
     });
 });
 
-// --- API: VOZIDLA & FOTKY ---
 app.get('/api/vehicles', (req, res) => db.all("SELECT * FROM vehicles ORDER BY id DESC", [], (err, rows) => res.json(rows)));
 app.get('/api/completed-jobs', (req, res) => db.all("SELECT * FROM completed_jobs ORDER BY id DESC", [], (err, rows) => res.json(rows)));
 
@@ -250,7 +237,6 @@ app.post('/api/login', (req, res) => {
     });
 });
 
-// PWA manifest & sw
 app.get('/manifest.json', (req, res) => {
     res.json({ name: "PofelGarage", short_name: "PofelGarage", start_url: "/", display: "standalone", background_color: "#0f172a", theme_color: "#2563eb" });
 });
