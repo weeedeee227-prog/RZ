@@ -98,6 +98,26 @@
             </form>
         </div>
 
+        <!-- SEKCE SPRÁVY NFC ZAŘÍZENÍ (Zobrazí se pouze pro stsi) -->
+        <div id="nfcManagementContainer" class="hidden" style="margin-bottom: 20px;">
+            <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; border: 1px solid #16a34a;">
+                <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📱 Správa NFC zařízení (Docházka)</h3>
+                <p style="color: #666; font-size: 13px; margin-bottom: 10px;">Zde spárujte telefony umístěné u NFC tagů. Token zjistíte tak, že na novém telefonu otevřete adresu <code style="color:#0066cc;">/nfc</code>.</p>
+                <form id="new-device-form">
+                    <div class="form-group">
+                        <label>Token zařízení:</label>
+                        <input type="text" id="device-token-input" placeholder="např. dev_..." required autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label>Jméno / Umístění:</label>
+                        <input type="text" id="device-username" placeholder="např. Pavel / Dílna" required autocomplete="off">
+                    </div>
+                    <button type="submit" class="btn" style="background: #16a34a;">Schválit a přidat zařízení</button>
+                </form>
+                <div id="nfc-devices-list" style="margin-top: 15px;">Načítání zařízení...</div>
+            </div>
+        </div>
+
         <h3>Seznam vozidel v kartách</h3>
         <div id="mechanicCardList" class="card-list"></div>
     </div>
@@ -105,29 +125,30 @@
 
 <script>
     // Ověření, zda má toto zařízení administrátorská práva
-document.addEventListener("DOMContentLoaded", async () => {
-    const deviceToken = localStorage.getItem('deviceToken');
-    
-    try {
-        const response = await fetch('/api/attendance/verify-admin', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceToken })
-        });
-        const data = await response.json();
+    document.addEventListener("DOMContentLoaded", async () => {
+        const deviceToken = localStorage.getItem('deviceToken');
+        
+        try {
+            const response = await fetch('/api/attendance/verify-admin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceToken })
+            });
+            const data = await response.json();
 
-        if (!data.isAdmin) {
-            document.body.innerHTML = `
-                <div style="text-align:center; margin-top:20vh; font-family:system-ui; color: #f8fafc; background: #0f172a; height: 100vh; padding: 20px;">
-                    <h1 style="color:#ef4444; font-size: 32px;">⛔ Přístup odepřen</h1>
-                    <p style="color:#94a3b8; font-size: 18px;">Tohle zařízení není autorizované pro správu P&R MONT.</p>
-                </div>
-            `;
+            if (!data.isAdmin) {
+                document.body.innerHTML = `
+                    <div style="text-align:center; margin-top:20vh; font-family:system-ui; color: #f8fafc; background: #0f172a; height: 100vh; padding: 20px;">
+                        <h1 style="color:#ef4444; font-size: 32px;">⛔ Přístup odepřen</h1>
+                        <p style="color:#94a3b8; font-size: 18px;">Tohle zařízení není autorizované pro správu P&R MONT.</p>
+                    </div>
+                `;
+            }
+        } catch (e) {
+            console.error('Chyba ověření admin přístupu');
         }
-    } catch (e) {
-        console.error('Chyba ověření admin přístupu');
-    }
-});
+    });
+
     let currentUser = '';
     let allVehicles = [];
 
@@ -140,13 +161,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         currentUser = val;
         document.getElementById('loggedUserDisplay').innerText = currentUser;
         
-        // Zobrazení tlačítka pro správu uživatelů pouze pro StSi (zadáno malými písmeny "stsi" kvůli .toLowerCase())
+        // Zobrazení prvků pouze pro StSi (stsi)
         if (currentUser === 'stsi') {
             document.getElementById('adminUserManagementBtn').innerHTML = `
                 <a href="/manage-users" class="btn-manage-users">⚙️ Správa uživatelů</a>
             `;
+            document.getElementById('nfcManagementContainer').classList.remove('hidden');
+            loadNfcDevices();
         } else {
             document.getElementById('adminUserManagementBtn').innerHTML = '';
+            document.getElementById('nfcManagementContainer').classList.add('hidden');
         }
 
         document.getElementById('loginView').classList.add('hidden');
@@ -251,7 +275,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    function editCard(spz, model, status, note, phone) {
+    function editCar(spz, model, status, note, phone) {
         document.getElementById('spz').value = spz;
         document.getElementById('model').value = model;
         document.getElementById('status').value = status;
@@ -263,6 +287,64 @@ document.addEventListener("DOMContentLoaded", async () => {
     function deleteCar(id) {
         if (!confirm('Opravdu smazat vozidlo?')) return;
         fetch('/api/vehicles/' + id, { method: 'DELETE' }).then(() => loadData());
+    }
+
+    // --- SPRÁVA NFC ZAŘÍZENÍ ---
+    async function loadNfcDevices() {
+        try {
+            const res = await fetch('/api/attendance/devices');
+            const devices = await res.json();
+            const listEl = document.getElementById('nfc-devices-list');
+            if (devices.length === 0) {
+                listEl.innerHTML = '<p style="color: #666; font-size: 13px;">Žádná schválená zařízení.</p>';
+                return;
+            }
+            listEl.innerHTML = devices.map(d => `
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; border: 1px solid #ddd;">
+                    <div>
+                        <span>📱 <strong>${d.username}</strong></span><br>
+                        <span style="font-size: 11px; color: #666; word-break: break-all;">Token: ${d.device_token}</span>
+                    </div>
+                    <button onclick="deleteNfcDevice('${d.device_token}')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px;">Odebrat</button>
+                </div>
+            `).join('');
+        } catch (err) {
+            console.error('Chyba při načítání zařízení');
+        }
+    }
+
+    const newDeviceForm = document.getElementById('new-device-form');
+    if (newDeviceForm) {
+        newDeviceForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const deviceToken = document.getElementById('device-token-input').value.trim();
+            const username = document.getElementById('device-username').value.trim();
+            
+            const res = await fetch('/api/attendance/register-device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceToken, username, isAdmin: 0 })
+            });
+            
+            if (res.ok) {
+                document.getElementById('new-device-form').reset();
+                loadNfcDevices();
+                alert('Zařízení bylo úspěšně autorizováno!');
+            } else {
+                const err = await res.json();
+                alert('Chyba: ' + (err.error || 'Neznámá chyba'));
+            }
+        });
+    }
+
+    async function deleteNfcDevice(token) {
+        if (!confirm('Opravdu chcete odebrat přístup tomuto zařízení?')) return;
+        const res = await fetch('/api/attendance/devices/' + encodeURIComponent(token), { method: 'DELETE' });
+        if (res.ok) {
+            loadNfcDevices();
+        } else {
+            alert('Chyba při mazání zařízení.');
+        }
     }
 
     if ("Notification" in window && Notification.permission !== "granted") {
