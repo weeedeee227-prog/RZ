@@ -98,7 +98,7 @@
             </form>
         </div>
 
-        <!-- SEKCE SPRÁVY NFC ZAŘÍZENÍ (Zobrazí se pouze pro stsi) -->
+        <!-- SEKCE SPRÁVY NFC ZAŘÍZENÍ (Zobrazí se pouze pro StSi) -->
         <div id="nfcManagementContainer" class="hidden" style="margin-bottom: 20px;">
             <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; border: 1px solid #16a34a;">
                 <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📱 Správa NFC zařízení (Docházka)</h3>
@@ -165,7 +165,7 @@
         document.getElementById('loggedUserDisplay').innerText = currentUser;
         
         // Zobrazení prvků pouze pro StSi (stsi)
-        if (currentUser === 'stsi') {
+        if (currentUser === 'StSi') {
             document.getElementById('adminUserManagementBtn').innerHTML = `
                 <a href="/manage-users" class="btn-manage-users">⚙️ Správa uživatelů</a>
             `;
