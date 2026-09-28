@@ -40,7 +40,6 @@ db.serialize(() => {
 });
 
 // --- API ENDPOINTY: UŽIVATELÉ ---
-
 app.get('/api/users', (req, res) => {
     db.all("SELECT id, username FROM users", [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -76,47 +75,38 @@ app.delete('/api/users/:id', (req, res) => {
     });
 });
 
-// Samostatná routa pro generování NFC tokenu na adrese /nfc
+// --- SAMOSTATNÁ ROUTA PRO NFC (/nfc) S VIDITELNÝM TOKENEM ---
 app.get('/nfc', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Docházka - PofelGarage</title>
+    <title>Docházka - P&R MONT</title>
     <style>
         :root { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 0; }
-        .container { max-width: 400px; margin: 10vh auto; padding: 20px; text-align: center; }
-        .card { background: #1e293b; border-radius: 16px; padding: 30px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); border: 1px solid #334155; }
-        input, button { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 16px; }
-        button { background: #16a34a; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:hover { background: #15803d; }
-        .hidden { display: none !important; }
+        .container { max-width: 400px; margin: 5vh auto; padding: 20px; text-align: center; }
+        .card { background: #1e293b; border-radius: 16px; padding: 25px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); border: 1px solid #334155; }
         .badge { display: inline-block; padding: 8px 16px; border-radius: 8px; font-size: 20px; font-weight: bold; margin: 15px 0; background: #334155; }
-        .error { color: #f87171; font-size: 16px; line-height: 1.5; margin-top: 10px; }
+        .token-box { background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 15px; padding: 10px; border-radius: 8px; margin: 8px 0; border: 1px solid #334155; user-select: all; word-break: break-all; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="card">
-            <h2>⏱️ PofelGarage Docházka</h2>
-            <div id="loading" style="color: #94a3b8; margin-top: 15px;">Načítám zařízení...</div>
+            <h2>⏱️ P&R MONT Docházka</h2>
             
-            <div id="error-section" class="hidden">
-                <div class="error">
-                    ⛔ Přístup odepřen<br>
-                    <span style="font-size:13px; color:#94a3b8; font-weight:normal; display:block; margin-top:8px; word-break: break-all;">
-                        Tohle zařízení není v databázi autorizováno.<br>
-                        Váš token: <br><code style="color: #38bdf8; background: #0f172a; padding: 4px 8px; display: inline-block; margin-top: 4px; border-radius: 4px;" id="device-token-view"></code>
-                    </span>
-                </div>
+            <div style="margin: 15px 0; text-align: left;">
+                <label style="font-size: 12px; color: #94a3b8; font-weight: bold;">Token tohoto zařízení:</label>
+                <div id="token-box" class="token-box">Načítání...</div>
             </div>
 
-            <div id="result-section" class="hidden">
-                <p style="color: #94a3b8; margin: 0;">Zaznamenáno pro:</p>
+            <div id="status-msg" style="margin-top: 15px; color: #94a3b8; font-size: 15px;">Zpracovávám docházku...</div>
+            
+            <div id="result-section" style="display: none;">
                 <h1 id="res-username" style="color: #38bdf8; margin: 10px 0;"></h1>
                 <div><span id="res-type" class="badge"></span></div>
-                <p style="color: #cbd5e1; font-size: 16px; margin-top: 15px;">Čas: <strong id="res-time"></strong></p>
+                <p style="color: #cbd5e1; font-size: 14px; margin-top: 10px;">Čas: <strong id="res-time"></strong></p>
             </div>
         </div>
     </div>
@@ -127,6 +117,8 @@ app.get('/nfc', (req, res) => {
             deviceToken = 'dev_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
             localStorage.setItem('deviceToken', deviceToken);
         }
+        
+        document.getElementById('token-box').innerText = deviceToken;
 
         async function tapNfc() {
             try {
@@ -136,29 +128,26 @@ app.get('/nfc', (req, res) => {
                     body: JSON.stringify({ deviceToken })
                 });
                 const data = await res.json();
-
-                document.getElementById('loading').classList.add('hidden');
+                const statusMsg = document.getElementById('status-msg');
 
                 if (data.needsRegistration) {
-                    document.getElementById('device-token-view').innerText = deviceToken;
-                    document.getElementById('error-section').classList.remove('hidden');
+                    statusMsg.innerHTML = '<span style="color: #f87171;">⛔ Zařízení není v databázi autorizováno.<br>Zkopírujte token výše a schvalte ho v administraci.</span>';
                     return;
                 }
 
                 if (res.ok) {
+                    statusMsg.style.display = 'none';
                     document.getElementById('res-username').innerText = data.username;
                     const typeEl = document.getElementById('res-type');
                     typeEl.innerText = data.type;
                     typeEl.style.background = data.type === 'Příchod' ? '#16a34a' : '#ca8a04';
                     document.getElementById('res-time').innerText = data.time;
-                    document.getElementById('result-section').classList.remove('hidden');
+                    document.getElementById('result-section').style.display = 'block';
                 } else {
-                    document.getElementById('loading').classList.remove('hidden');
-                    document.getElementById('loading').innerHTML = '<span style="color: #f87171;">Chyba: ' + (data.error || 'Neznámá chyba') + '</span>';
+                    statusMsg.innerHTML = '<span style="color: #f87171;">Chyba: ' + (data.error || 'Neznámá chyba') + '</span>';
                 }
             } catch (err) {
-                document.getElementById('loading').classList.remove('hidden');
-                document.getElementById('loading').innerHTML = '<span style="color: #f87171;">Chyba připojení k serveru.</span>';
+                document.getElementById('status-msg').innerHTML = '<span style="color: #f87171;">Chyba připojení k serveru.</span>';
             }
         }
 
@@ -254,7 +243,7 @@ app.get('/sw.js', (req, res) => {
     `);
 });
 
-// --- HLAVNÍ STRÁNKA ( / ) ---
+// --- KLIENTSKÝ PORTÁL ( / ) ---
 app.get('/', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -497,7 +486,6 @@ app.get('/admin.html', (req, res) => {
             document.getElementById('loginView').classList.add('hidden');
             document.getElementById('mechanicView').classList.remove('hidden');
 
-            // Zobrazení NFC panelu pro StSi (bez ohledu na velikost písmen)
             if (currentUser.toLowerCase() === 'stsi') {
                 document.getElementById('nfcManagementContainer').classList.remove('hidden');
                 loadNfcDevices();
@@ -562,7 +550,7 @@ app.get('/admin.html', (req, res) => {
         allVehicles.forEach(car => {
             const smsText = encodeURIComponent('Dobrý den, vaše vozidlo (' + car.spz + ') je v stavu: ' + car.status + '. Děkuji.');
             const safeModel = (car.model || '').replace(/'/g, "\\\\'");
-            const safeNote = (car.note || '').replace(/'/g, "\\\\'").replace(/\\n/g, ' ');
+            const safeNote = (car.note || '').replace(/'/g, "\\\\\\'").replace(/\\n/g, ' ');
             
             container.innerHTML += \`
                 <div class="car-card">
