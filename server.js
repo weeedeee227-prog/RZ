@@ -144,17 +144,15 @@ app.post('/api/attendance/nfc-tap', (req, res) => {
 
         const username = device.username;
 
-        // Zjistíme poslední záznam pro uživatele, abychom věděli, zda má následovat Příchod nebo Odchod
         db.get("SELECT type FROM attendance WHERE username = ? ORDER BY id DESC LIMIT 1", [username], (err, lastLog) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            // Pokud byl poslední záznam Příchod, teď bude Odchod. Jinak Příchod.
             const nextType = (lastLog && lastLog.type === 'Příchod') ? 'Odchod' : 'Příchod';
             
             const now = new Date();
             const hours = String(now.getHours()).padStart(2, '0');
             const minutes = String(now.getMinutes()).padStart(2, '0');
-            const timeString = `${hours}:${minutes}`; // např. 07:00 nebo 16:32
+            const timeString = `${hours}:${minutes}`;
             const dateString = now.toISOString().split('T')[0];
 
             db.run(
@@ -173,6 +171,35 @@ app.post('/api/attendance/nfc-tap', (req, res) => {
     });
 });
 
+// --- GENERÁTOR ICS KALENDÁŘE (/calendar.ics) ---
+app.get('/calendar.ics', (req, res) => {
+    db.all("SELECT * FROM attendance ORDER BY id DESC", [], (err, rows) => {
+        if (err) return res.status(500).send('Chyba databáze');
+
+        let ics = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//PofelGarage//Dochazka//CS\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\n";
+
+        rows.forEach(row => {
+            const cleanDate = row.date.replace(/-/g, '');
+            const cleanTime = row.time.replace(':', '') + '00';
+
+            ics += "BEGIN:VEVENT\n";
+            ics += `UID:attendance-${row.id}@pofelgarage\n`;
+            ics += `DTSTAMP:${cleanDate}T${cleanTime}Z\n`;
+            ics += `DTSTART:${cleanDate}T${cleanTime}Z\n`;
+            ics += `DTEND:${cleanDate}T${cleanTime}Z\n`;
+            ics += `SUMMARY:${row.type} - ${row.username}\n`;
+            ics += `DESCRIPTION:Zaznamenáno přes NFC v ${row.time} (${row.username})\n`;
+            ics += "END:VEVENT\n";
+        });
+
+        ics += "END:VCALENDAR";
+
+        res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+        res.setHeader('Content-Disposition', 'inline; filename="dochazka.ics"');
+        res.send(ics);
+    });
+});
+
 // --- SAMOSTATNÁ ROUTA PRO NFC (/nfc) S VIDITELNÝM TOKENEM ---
 app.get('/nfc', (req, res) => {
     res.send(`<!DOCTYPE html>
@@ -180,7 +207,7 @@ app.get('/nfc', (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Docházka - P&R MONT</title>
+    <title>Docházka - PofelGarage</title>
     <style>
         :root { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 0; }
         .container { max-width: 400px; margin: 5vh auto; padding: 20px; text-align: center; }
@@ -192,7 +219,7 @@ app.get('/nfc', (req, res) => {
 <body>
     <div class="container">
         <div class="card">
-            <h2>⏱️ P&R MONT Docházka</h2>
+            <h2>⏱️ PofelGarage Docházka</h2>
             
             <div style="margin: 15px 0; text-align: left;">
                 <label style="font-size: 12px; color: #94a3b8; font-weight: bold;">Token tohoto zařízení:</label>
@@ -317,8 +344,8 @@ app.delete('/api/vehicles/:id', (req, res) => {
 // --- PWA MANIFEST & SERVICE WORKER ---
 app.get('/manifest.json', (req, res) => {
     res.json({
-        name: "Autoservis - Registr Vozidel",
-        short_name: "Autoservis",
+        name: "PofelGarage - Registr Vozidel",
+        short_name: "PofelGarage",
         start_url: "/",
         display: "standalone",
         background_color: "#0f172a",
@@ -348,7 +375,7 @@ app.get('/', (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Autoservis - Stav vozidla</title>
+    <title>PofelGarage - Stav vozidla</title>
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#2563eb">
     <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
@@ -368,7 +395,7 @@ app.get('/', (req, res) => {
 <body>
     <div class="container">
         <div class="top-bar">
-            <h2>🚗 Zjištění stavu vozidla</h2>
+            <h2>🚗 PofelGarage - Stav vozidla</h2>
             <a href="/admin.html" class="admin-link">🔒 Mechanici</a>
         </div>
 
@@ -421,14 +448,14 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// --- ADMINISTRACE S NFC MANAŽEREM A PŘEHLEDEM DOCHÁZKY ( /admin.html ) ---
+// --- ADMINISTRACE S ODKAZEM NA KALENDÁŘ ( /admin.html ) ---
 app.get('/admin.html', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>P&R MONT - Administrace mechaniků</title>
+    <title>PofelGarage - Administrace mechaniků</title>
     <style>
         * { box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 16px; }
@@ -451,6 +478,7 @@ app.get('/admin.html', (req, res) => {
         .btn-delete { background: #dc2626; color: #fff; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; font-size: 12px; }
         .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 13px; border-bottom: 1px solid #334155; padding-bottom: 8px; }
         .error-msg { color: #f87171; font-size: 14px; margin-top: 5px; }
+        .calendar-box { background: #0f172a; padding: 10px; border-radius: 6px; border: 1px solid #334155; font-family: monospace; font-size: 13px; color: #38bdf8; word-break: break-all; margin-top: 5px; user-select: all; }
     </style>
 </head>
 <body>
@@ -458,7 +486,7 @@ app.get('/admin.html', (req, res) => {
 <div class="container">
     <!-- PŘIHLÁŠENÍ MECHANIKA -->
     <div id="loginView">
-        <h1 style="text-align: center;">P&R MONT - Mechanici</h1>
+        <h1 style="text-align: center;">PofelGarage - Mechanici</h1>
         <p style="text-align: center; font-size: 13px; color: #94a3b8;">Zadejte své přihlašovací údaje (např. <b>StSi</b>)</p>
         <form id="login-form">
             <div class="form-group">
@@ -516,13 +544,15 @@ app.get('/admin.html', (req, res) => {
             </form>
         </div>
 
-        <!-- SEKCE SPRÁVY NFC A DOCHÁZKY (Zobrazí se POUZE pro StSi) -->
+        <!-- SEKCE SPRÁVY NFC A KALENDÁŘE (Zobrazí se POUZE pro StSi) -->
         <div id="nfcManagementContainer" class="hidden" style="margin-bottom: 20px;">
             <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #16a34a;">
-                <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📱 Správa docházky a NFC zařízení</h3>
-                <p style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">Token zjistíte otevřením adresy <code style="color:#38bdf8;">/nfc</code> na daném zařízení.</p>
-                
-                <form id="new-device-form">
+                <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📅 Odkaz na kalendář docházky</h3>
+                <p style="color: #94a3b8; font-size: 13px; margin-bottom: 5px;">Zkopírujte tento odkaz a přidejte si ho do svého Google Kalendáře / Apple Kalendáře jako odebíraný kalendář:</p>
+                <div id="calendar-link-box" class="calendar-box">Načítám odkaz...</div>
+
+                <h3 style="margin-top:15px; font-size:15px; color: #16a34a;">📱 Správa NFC zařízení</h3>
+                <form id="new-device-form" style="margin-top: 10px;">
                     <div class="form-group">
                         <label>Token zařízení:</label>
                         <input type="text" id="device-token-input" placeholder="např. dev_..." required autocomplete="off">
@@ -550,6 +580,9 @@ app.get('/admin.html', (req, res) => {
 <script>
     let currentUser = '';
     let allVehicles = [];
+
+    // Automaticky vyplní aktuální URL kalendáře
+    document.getElementById('calendar-link-box').innerText = window.location.origin + '/calendar.ics';
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -761,5 +794,5 @@ app.get('/admin.html', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server běží na portu ${PORT}`);
+    console.log(`Server PofelGarage běží na portu ${PORT}`);
 });
