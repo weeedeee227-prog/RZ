@@ -1,12 +1,20 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Vytvoření složky pro nahrávání fotek, pokud neexistuje
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+app.use('/uploads', express.static(uploadDir));
 
 // --- DATABÁZE ---
 const db = new sqlite3.Database('./database.sqlite', (err) => {
@@ -59,6 +67,12 @@ db.serialize(() => {
         type TEXT NOT NULL,
         time TEXT NOT NULL,
         date TEXT NOT NULL
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS vehicle_photos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vehicle_id INTEGER NOT NULL,
+        photo_path TEXT NOT NULL
     )`);
 
     db.run("INSERT OR IGNORE INTO users (username, password) VALUES ('StSi', 'Stsi3103*')");
@@ -217,7 +231,7 @@ app.get('/calendar.ics', (req, res) => {
     });
 });
 
-// --- API ENDPOINTY: VOZIDLA A ARCHIV ---
+// --- API ENDPOINTY: VOZIDLA A FOTKY ---
 app.get('/api/vehicles', (req, res) => {
     db.all("SELECT * FROM vehicles ORDER BY id DESC", [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -329,9 +343,68 @@ app.post('/api/vehicles', (req, res) => {
 
 app.delete('/api/vehicles/:id', (req, res) => {
     const { id } = req.params;
-    db.run("DELETE FROM vehicles WHERE id = ?", [id], function(err) {
+    db.all("SELECT photo_path FROM vehicle_photos WHERE vehicle_id = ?", [id], (err, rows) => {
+        if (rows) {
+            rows.forEach(r => {
+                const fullPath = path.join(__dirname, r.photo_path);
+                if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+            });
+        }
+        db.run("DELETE FROM vehicle_photos WHERE vehicle_id = ?", [id], () => {
+            db.run("DELETE FROM vehicles WHERE id = ?", [id], function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ message: 'Vozidlo smazáno' });
+            });
+        });
+    });
+});
+
+// --- API PRO FOTKY ---
+app.get('/api/vehicles/:id/photos', (req, res) => {
+    db.all("SELECT * FROM vehicle_photos WHERE vehicle_id = ?", [req.params.id], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Vozidlo smazáno' });
+        res.json(rows);
+    });
+});
+
+app.post('/api/vehicles/:id/photos', (req, res) => {
+    const { imageBase64 } = req.body;
+    if (!imageBase64) return res.status(400).json({ error: 'Chybí obrazová data.' });
+
+    const matches = imageBase64.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+        return res.status(400).json({ error: 'Neplatný formát obrázku.' });
+    }
+
+    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+    const base64Data = matches[2];
+    const uniqueFilename = 'car_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7) + '.' + ext;
+    const filePath = path.join(uploadDir, uniqueFilename);
+
+    fs.writeFile(filePath, base64Data, 'base64', (err) => {
+        if (err) return res.status(500).json({ error: 'Chyba při ukládání souboru.' });
+
+        const dbPath = '/uploads/' + uniqueFilename;
+        db.run("INSERT INTO vehicle_photos (vehicle_id, photo_path) VALUES (?, ?)", [req.params.id, dbPath], function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Fotka úspěšně nahrána', id: this.lastID, photo_path: dbPath });
+        });
+    });
+});
+
+app.delete('/api/photos/:id', (req, res) => {
+    db.get("SELECT * FROM vehicle_photos WHERE id = ?", [req.params.id], (err, row) => {
+        if (err || !row) return res.status(404).json({ error: 'Fotka nenalezena.' });
+
+        const fullPath = path.join(__dirname, row.photo_path);
+        if (fs.existsSync(fullPath)) {
+            fs.unlinkSync(fullPath);
+        }
+
+        db.run("DELETE FROM vehicle_photos WHERE id = ?", [req.params.id], (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Fotka smazána' });
+        });
     });
 });
 
@@ -531,7 +604,7 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// --- ADMINISTRACE S PŘEPÍNATELNÝMI ZÁLOŽKAMI ( /admin.html ) ---
+// --- ADMINISTRACE S MODÁLNÍM OKNEM PRO FOTKY ( /admin.html ) ---
 app.get('/admin.html', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -562,7 +635,6 @@ app.get('/admin.html', (req, res) => {
         
         .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 13px; background: #1e293b; padding: 12px 16px; border-radius: 10px; border: 1px solid #334155; }
         
-        /* Hlavní lišta záložek */
         .tabs-bar { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 20px; padding-bottom: 4px; }
         .tab-btn { background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 10px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; white-space: nowrap; transition: all 0.2s; }
         .tab-btn:hover { background: #334155; color: #fff; }
@@ -576,6 +648,12 @@ app.get('/admin.html', (req, res) => {
         .progress-bar-container { background: #334155; border-radius: 4px; overflow: hidden; height: 12px; margin: 8px 0; display: flex; }
         .progress-fill-profit { background: #16a34a; height: 100%; }
         .progress-fill-cost { background: #dc2626; height: 100%; }
+
+        /* Styly pro modální okno (fotogalerii) */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+        .modal-content { background: #1e293b; border: 1px solid #334155; border-radius: 12px; width: 100%; max-width: 500px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .modal-header { padding: 15px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; background: #0f172a; }
+        .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
     </style>
 </head>
 <body>
@@ -739,12 +817,31 @@ app.get('/admin.html', (req, res) => {
     </div>
 </div>
 
+<!-- MODÁLNÍ OKNO PRO FOTODOKUMENTACI -->
+<div id="photoModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalTitle" style="margin:0; font-size:16px; color:#38bdf8;">Fotodokumentace vozidla</h3>
+            <button onclick="closePhotoModal()" style="background: #dc2626; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-weight: bold; cursor: pointer; font-size: 12px;">Zavřít</button>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: 12px;">
+                <label style="background: #2563eb; color: white; padding: 10px; border-radius: 6px; text-align: center; display: block; font-weight: bold; cursor: pointer; font-size: 14px;">
+                    📷 Vyfotit / Nahrát novou fotku <input type="file" accept="image/*" onchange="uploadModalPhoto(this)" style="display: none;">
+                </label>
+            </div>
+            <div id="modalPhotoList" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">Načítám fotky...</div>
+        </div>
+    </div>
+</div>
+
 <script>
     let currentUser = localStorage.getItem('pofelGarageUser') || '';
     let allVehicles = [];
     let completedJobs = [];
     let allUsers = [];
     let attendanceInterval = null;
+    let activeModalCarId = null;
 
     document.getElementById('calendar-link-box').innerText = window.location.origin + '/calendar.ics';
 
@@ -778,18 +875,15 @@ app.get('/admin.html', (req, res) => {
     }
 
     function switchTab(tabId, btnElement) {
-        // Skrýt všechny sekce
         const sections = ['zakazky', 'finance', 'archiv', 'uzivatele', 'nfc'];
         sections.forEach(sec => {
             const el = document.getElementById('tab-' + sec);
             if (el) el.classList.add('hidden');
         });
 
-        // Zobrazit vybranou
         const target = document.getElementById('tab-' + tabId);
         if (target) target.classList.remove('hidden');
 
-        // Odstranit aktivní třídu ze všech tlačítek a přidat na aktuální
         const buttons = document.querySelectorAll('.tab-btn');
         buttons.forEach(b => b.classList.remove('active'));
         if (btnElement) btnElement.classList.add('active');
@@ -945,9 +1039,77 @@ app.get('/admin.html', (req, res) => {
                         <button class="btn-edit" onclick="editCar('\${car.spz}', '\${safeModel}', '\${car.status}', '\${safeNote}', '\${car.phone}', '\${assignedMech}')">Upravit</button>
                         <button class="btn-delete" onclick="deleteCar(\${car.id})">Smazat</button>
                     </div>
+
+                    <button onclick="openPhotoModal(\${car.id}, '\${car.spz}')" style="background: #334155; color: #38bdf8; border: 1px solid #475569; padding: 8px; border-radius: 6px; width: 100%; margin-top: 8px; font-size: 13px; font-weight: bold; cursor: pointer;">📷 Fotodokumentace</button>
                 </div>
             \`;
         });
+    }
+
+    // --- FUNKCE PRO MODÁLNÍ OKNO FOTEK ---
+    async function openPhotoModal(carId, spz) {
+        activeModalCarId = carId;
+        document.getElementById('modalTitle').innerText = 'Fotodokumentace vozidla: ' + spz;
+        document.getElementById('photoModal').classList.remove('hidden');
+        loadModalPhotos(carId);
+    }
+
+    function closePhotoModal() {
+        document.getElementById('photoModal').classList.add('hidden');
+        activeModalCarId = null;
+    }
+
+    async function loadModalPhotos(carId) {
+        const listEl = document.getElementById('modalPhotoList');
+        listEl.innerHTML = '<span style="color:#94a3b8; font-size:13px;">Načítám fotky...</span>';
+        try {
+            const res = await fetch('/api/vehicles/' + carId + '/photos');
+            const photos = await res.json();
+            if (photos.length === 0) {
+                listEl.innerHTML = '<span style="color: #94a3b8; font-size: 13px;">Zatím žádné fotky u tohoto vozidla.</span>';
+                return;
+            }
+            listEl.innerHTML = photos.map(p => \`
+                <div style="position: relative; display: inline-block;">
+                    <a href="\${p.photo_path}" target="_blank">
+                        <img src="\${p.photo_path}" style="width: 90px; height: 90px; object-fit: cover; border-radius: 6px; border: 1px solid #475569;">
+                    </a>
+                    <button onclick="deleteModalPhoto(\${p.id})" style="position: absolute; top: -6px; right: -6px; background: #dc2626; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold;">×</button>
+                </div>
+            \`).join('');
+        } catch(e) {
+            listEl.innerHTML = '<span style="color:#f87171; font-size:13px;">Chyba při načítání fotek.</span>';
+        }
+    }
+
+    function uploadModalPhoto(inputEl) {
+        if (!activeModalCarId) return;
+        const file = inputEl.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            const base64 = e.target.result;
+            const res = await fetch('/api/vehicles/' + activeModalCarId + '/photos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imageBase64: base64 })
+            });
+            if (res.ok) {
+                inputEl.value = '';
+                loadModalPhotos(activeModalCarId);
+            } else {
+                alert('Chyba při nahrávání fotky.');
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function deleteModalPhoto(photoId) {
+        if (!confirm('Opravdu smazat tuto fotku?')) return;
+        const res = await fetch('/api/photos/' + photoId, { method: 'DELETE' });
+        if (res.ok) {
+            loadModalPhotos(activeModalCarId);
+        }
     }
 
     function renderMechanicsStats() {
