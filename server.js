@@ -28,7 +28,7 @@ db.serialize(() => {
         mechanic TEXT
     )`);
 
-    // Trvalá databáze (archiv) dokončených zakázek a financí (přidán sloupec completed_by jako mechanik)
+    // Trvalá databáze (archiv) dokončených zakázek a financí
     db.run(`CREATE TABLE IF NOT EXISTS completed_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         spz TEXT NOT NULL,
@@ -537,7 +537,7 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// --- ADMINISTRACE S PŘIŘAZOVÁNÍM MECHANIKŮ A GRAFY V KARTÁCH ( /admin.html ) ---
+// --- ADMINISTRACE ( /admin.html ) ---
 app.get('/admin.html', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -662,7 +662,34 @@ app.get('/admin.html', (req, res) => {
             </form>
         </div>
 
-        <!-- SBAZOVACÍ SEKCE NFC A KALENDÁŘE (Pouze pro StSi) -->
+        <!-- ROLOVACÍ KARTA: SPRÁVA UŽIVATELŮ (Pouze pro StSi) -->
+        <div id="userManagementContainer" class="hidden" style="margin-bottom: 15px;">
+            <details style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #38bdf8; cursor: pointer;">
+                <summary style="font-size: 15px; font-weight: bold; color: #38bdf8; outline: none; user-select: none;">
+                    👥 Správa uživatelů (Mechaniků) <span style="font-size: 12px; color: #94a3b8; font-weight: normal;">(kliknutím rozbalíte/sbalíte)</span>
+                </summary>
+                
+                <div style="margin-top: 12px; cursor: default;" onclick="event.stopPropagation()">
+                    <h3 style="margin-top:0; font-size:15px; color: #38bdf8;">➕ Přidat nového uživatele / mechanika</h3>
+                    <form id="new-user-form" style="margin-top: 10px;">
+                        <div class="form-group">
+                            <label>Uživatelské jméno:</label>
+                            <input type="text" id="new-username-input" placeholder="např. Frantisek" required autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label>Heslo:</label>
+                            <input type="password" id="new-password-input" placeholder="Zadejte heslo" required autocomplete="off">
+                        </div>
+                        <button type="submit" class="btn" style="background: #2563eb;">Vytvořit uživatele</button>
+                    </form>
+
+                    <h3 style="color: #f8fafc; font-size: 14px; margin-top: 15px;">Seznam registrovaných uživatelů:</h3>
+                    <div id="users-list-admin" style="margin-top: 5px;">Načítání uživatelů...</div>
+                </div>
+            </details>
+        </div>
+
+        <!-- ROLOVACÍ KARTA: NFC A KALENDÁŘ (Pouze pro StSi) -->
         <div id="nfcManagementContainer" class="hidden" style="margin-bottom: 20px;">
             <details style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #16a34a; cursor: pointer;">
                 <summary style="font-size: 15px; font-weight: bold; color: #16a34a; outline: none; user-select: none;">
@@ -762,13 +789,16 @@ app.get('/admin.html', (req, res) => {
 
             if (currentUser.toLowerCase() === 'stsi') {
                 document.getElementById('nfcManagementContainer').classList.remove('hidden');
+                document.getElementById('userManagementContainer').classList.remove('hidden');
                 loadNfcDevices();
                 loadAttendanceSummary();
+                loadAdminUsersList();
 
                 if (attendanceInterval) clearInterval(attendanceInterval);
                 attendanceInterval = setInterval(loadAttendanceSummary, 1000);
             } else {
                 document.getElementById('nfcManagementContainer').classList.add('hidden');
+                document.getElementById('userManagementContainer').classList.add('hidden');
                 if (attendanceInterval) clearInterval(attendanceInterval);
             }
 
@@ -791,7 +821,6 @@ app.get('/admin.html', (req, res) => {
             // Naplnění selectu pro přiřazení mechanika
             const mechSelect = document.getElementById('assignedMechanic');
             mechSelect.innerHTML = allUsers.map(u => \`<option value="\${u.username}">\${u.username}</option>\`).join('');
-            // Předvybrat aktuálního uživatele
             mechSelect.value = currentUser;
         } catch (e) {
             console.error('Chyba při načítání uživatelů');
@@ -892,8 +921,6 @@ app.get('/admin.html', (req, res) => {
         const statsContainer = document.getElementById('mechanicsStatsContainer');
         statsContainer.innerHTML = '';
 
-        // Určení, které karty zobrazit:
-        // Pokud je uživatel StSi (admin), uvidí všechny mechaniky. Jinak uvidí jen sám sebe.
         const isAdmin = currentUser.toLowerCase() === 'stsi';
         let targetUsers = isAdmin ? allUsers : allUsers.filter(u => u.username.toLowerCase() === currentUser.toLowerCase());
 
@@ -903,9 +930,7 @@ app.get('/admin.html', (req, res) => {
 
         targetUsers.forEach(userObj => {
             const mechName = userObj.username;
-            // Filtrovat dokončené zakázky tohoto mechanika
             const mechJobs = completedJobs.filter(j => j.completed_by && j.completed_by.toLowerCase() === mechName.toLowerCase());
-            // Filtrovat aktivní zakázky přiřazené tomuto mechanikovi
             const mechActive = allVehicles.filter(v => v.mechanic && v.mechanic.toLowerCase() === mechName.toLowerCase());
 
             let totalExpenses = 0;
@@ -918,7 +943,6 @@ app.get('/admin.html', (req, res) => {
                 totalProfit += j.net_profit;
             });
 
-            // Výpočet poměru pro jednoduchý vizuální graf (sloupec)
             let profitPercent = totalRevenue > 0 ? Math.max(0, Math.min(100, (totalProfit / totalRevenue) * 100)) : 0;
             let costPercent = totalRevenue > 0 ? Math.max(0, Math.min(100, (totalExpenses / totalRevenue) * 100)) : 0;
 
@@ -950,7 +974,6 @@ app.get('/admin.html', (req, res) => {
                             <div>💵 Celkové tržby: <strong style="color: #38bdf8;">\${totalRevenue} Kč</strong></div>
                         </div>
 
-                        <!-- Vizuální graf / poměr nákladů a zisku -->
                         <div style="font-size: 12px; color: #94a3b8; margin-top: 6px;">Vizuální poměr (Náklady vs Čistý zisk z tržeb):</div>
                         <div class="progress-bar-container">
                             <div class="progress-fill-profit" style="width: \${profitPercent}%;" title="Čistý zisk \${profitPercent.toFixed(1)}%"></div>
@@ -1138,6 +1161,65 @@ app.get('/admin.html', (req, res) => {
             loadNfcDevices();
         } else {
             alert('Chyba při mazání zařízení.');
+        }
+    }
+
+    // Správa uživatelů (Admin rozhraní)
+    async function loadAdminUsersList() {
+        try {
+            const res = await fetch('/api/users');
+            const users = await res.json();
+            const listEl = document.getElementById('users-list-admin');
+            if (!listEl) return;
+            if (users.length === 0) {
+                listEl.innerHTML = '<p style="color: #94a3b8; font-size: 13px;">Žádní uživatelé.</p>';
+                return;
+            }
+            listEl.innerHTML = users.map(u => \`
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; border: 1px solid #334155;">
+                    <span>👤 <strong>\${u.username}</strong></span>
+                    \${u.username.toLowerCase() !== 'stsi' ? \`<button onclick="deleteUser(\${u.id})" style="background: #dc2626; color: white; border: none; padding: 6px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px;">Smazat</button>\` : '<span style="font-size: 11px; color: #94a3b8;">Hlavní admin</span>'}
+                </div>
+            \`).join('');
+        } catch (err) {
+            console.error('Chyba při načítání uživatelů');
+        }
+    }
+
+    const newUserForm = document.getElementById('new-user-form');
+    if (newUserForm) {
+        newUserForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('new-username-input').value.trim();
+            const password = document.getElementById('new-password-input').value;
+
+            const res = await fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            if (res.ok) {
+                document.getElementById('new-user-form').reset();
+                loadAdminUsersList();
+                loadUsersAndData();
+                alert('Uživatel úspěšně vytvořen!');
+            } else {
+                const err = await res.json();
+                alert('Chyba: ' + (err.error || 'Neznámá chyba'));
+            }
+        });
+    }
+
+    async function deleteUser(id) {
+        if (!confirm('Opravdu chcete smazat tohoto uživatele?')) return;
+        const res = await fetch('/api/users/' + id, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) {
+            loadAdminUsersList();
+            loadUsersAndData();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
         }
     }
 </script>
