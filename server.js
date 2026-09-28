@@ -27,7 +27,7 @@ db.serialize(() => {
         updated_by TEXT
     )`);
 
-    // Trvalá, nesmazatelná databáze (archiv) dokončených zakázek a financí
+    // Trvalá databáze (archiv) dokončených zakázek a financí
     db.run(`CREATE TABLE IF NOT EXISTS completed_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         spz TEXT NOT NULL,
@@ -234,6 +234,35 @@ app.get('/api/completed-jobs', (req, res) => {
     db.all("SELECT * FROM completed_jobs ORDER BY id DESC", [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
+    });
+});
+
+// Úprava zakázky v archivu
+app.put('/api/completed-jobs/:id', (req, res) => {
+    let { work_done, cost_expenses, final_price } = req.body;
+    if (!work_done || cost_expenses === undefined || final_price === undefined) {
+        return res.status(400).json({ error: 'Vyplňte všechna finanční a pracovní pole.' });
+    }
+    const expenses = parseFloat(cost_expenses) || 0;
+    const price = parseFloat(final_price) || 0;
+    const netProfit = price - expenses;
+
+    db.run(
+        `UPDATE completed_jobs SET work_done = ?, cost_expenses = ?, final_price = ?, net_profit = ? WHERE id = ?`,
+        [work_done.trim(), expenses, price, netProfit, req.params.id],
+        function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Zakázka v archivu aktualizována', netProfit });
+        }
+    );
+});
+
+// Smazání zakázky z archivu
+app.delete('/api/completed-jobs/:id', (req, res) => {
+    const { id } = req.params;
+    db.run("DELETE FROM completed_jobs WHERE id = ?", [id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Zakázka smazána z archivu' });
     });
 });
 
@@ -507,7 +536,7 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// --- ADMINISTRACE S ARCHIVEM A FINANCOVÁNÍM ( /admin.html ) ---
+// --- ADMINISTRACE S ARCHIVEM, VYHLEDÁVÁNÍM A FINANCOVÁNÍM ( /admin.html ) ---
 app.get('/admin.html', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -657,8 +686,11 @@ app.get('/admin.html', (req, res) => {
         <h3>Seznam vozidel v kartách</h3>
         <div id="mechanicCardList" class="card-list"></div>
 
-        <!-- TRVALÝ ARCHIV DOKONČENÝCH ZAKÁZEK A ZISKŮ -->
+        <!-- TRVALÝ ARCHIV DOKONČENÝCH ZAKÁZEK S VYHLEDÁVÁNÍM -->
         <h3 style="margin-top: 30px; color: #16a34a;">📂 Trvalý archiv dokončených zakázek</h3>
+        <div class="form-group" style="margin-top: 10px;">
+            <input type="text" id="archiveSearch" placeholder="🔍 Vyhledat v archivu dle SPZ..." oninput="renderCompletedArchive()" style="text-transform: uppercase;">
+        </div>
         <div id="completedArchiveList" class="card-list"></div>
     </div>
 </div>
@@ -823,13 +855,21 @@ app.get('/admin.html', (req, res) => {
 
     function renderCompletedArchive() {
         const container = document.getElementById('completedArchiveList');
-        if (completedJobs.length === 0) {
-            container.innerHTML = '<p style="text-align:center; color:#94a3b8;">Zatím žádné uzavřené zakázky v archivu.</p>';
+        const searchInput = document.getElementById('archiveSearch');
+        const filterVal = searchInput ? searchInput.value.trim().toUpperCase() : '';
+
+        const filteredJobs = completedJobs.filter(job => job.spz.toUpperCase().includes(filterVal));
+
+        if (filteredJobs.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:#94a3b8;">Žádné odpovídající zakázky v archivu.</p>';
             return;
         }
 
         container.innerHTML = '';
-        completedJobs.forEach(job => {
+        filteredJobs.forEach(job => {
+            const smsText = encodeURIComponent('Dobrý den, vaše vozidlo (' + job.spz + ') - archiv. Děkuji.');
+            const safeWorkDone = (job.work_done || '').replace(/'/g, "\\\\'");
+
             container.innerHTML += \`
                 <div class="car-card" style="border-color: #16a34a;">
                     <div class="car-header">
@@ -840,9 +880,51 @@ app.get('/admin.html', (req, res) => {
                     <div class="car-row"><strong>Náklady:</strong> \${job.cost_expenses} Kč | <strong>Cena pro zákazníka:</strong> \${job.final_price} Kč</div>
                     <div class="car-row"><strong>Telefon:</strong> <a href="tel:\${job.phone}" style="color: #38bdf8;">\${job.phone}</a></div>
                     <div class="car-row" style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Uzavřel: \${job.completed_by} | Datum: \${job.completed_at}</div>
+
+                    <div class="card-actions-row" style="margin-top: 10px;">
+                        <a href="tel:\${job.phone}" class="btn-call">📞 Zavolat</a>
+                        <a href="sms:\${job.phone}?body=\${smsText}" class="btn-sms">💬 SMS</a>
+                        <button class="btn-edit" onclick="editCompletedJob(\${job.id}, '\${safeWorkDone}', \${job.cost_expenses}, \${job.final_price})">Upravit</button>
+                        <button class="btn-delete" onclick="deleteCompletedJob(\${job.id})">Smazat</button>
+                    </div>
                 </div>
             \`;
         });
+    }
+
+    function editCompletedJob(id, currentWork, currentCost, currentPrice) {
+        const newWork = prompt('Upravit provedenou práci:', currentWork);
+        if (newWork === null) return;
+        const newCost = prompt('Upravit náklady (Kč):', currentCost);
+        if (newCost === null) return;
+        const newPrice = prompt('Upravit konečnou cenu pro zákazníka (Kč):', currentPrice);
+        if (newPrice === null) return;
+
+        fetch('/api/completed-jobs/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                work_done: newWork,
+                cost_expenses: parseFloat(newCost) || 0,
+                final_price: parseFloat(newPrice) || 0
+            })
+        })
+        .then(res => res.json())
+        .then(res => {
+            if (res.error) {
+                alert(res.error);
+                return;
+            }
+            alert('Zakázka v archivu upravena! Nový čistý zisk: ' + res.netProfit + ' Kč');
+            loadData();
+        });
+    }
+
+    function deleteCompletedJob(id) {
+        if (!confirm('Opravdu chcete smazat tuto zakázku z trvalého archivu?')) return;
+        fetch('/api/completed-jobs/' + id, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(() => loadData());
     }
 
     function editCar(spz, model, status, note, phone) {
