@@ -15,7 +15,7 @@ const db = new sqlite3.Database('./database.sqlite', (err) => {
 });
 
 db.serialize(() => {
-    // Tabulka aktivních vozidel v servisu
+    // Tabulka aktivních vozidel v servisu (přidán sloupec mechanic)
     db.run(`CREATE TABLE IF NOT EXISTS vehicles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         spz TEXT UNIQUE NOT NULL,
@@ -24,10 +24,11 @@ db.serialize(() => {
         note TEXT,
         phone TEXT NOT NULL,
         created_by TEXT,
-        updated_by TEXT
+        updated_by TEXT,
+        mechanic TEXT
     )`);
 
-    // Trvalá databáze (archiv) dokončených zakázek a financí
+    // Trvalá databáze (archiv) dokončených zakázek a financí (přidán sloupec completed_by jako mechanik)
     db.run(`CREATE TABLE IF NOT EXISTS completed_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         spz TEXT NOT NULL,
@@ -237,9 +238,8 @@ app.get('/api/completed-jobs', (req, res) => {
     });
 });
 
-// Úprava zakázky v archivu
 app.put('/api/completed-jobs/:id', (req, res) => {
-    let { work_done, cost_expenses, final_price } = req.body;
+    let { work_done, cost_expenses, final_price, completed_by } = req.body;
     if (!work_done || cost_expenses === undefined || final_price === undefined) {
         return res.status(400).json({ error: 'Vyplňte všechna finanční a pracovní pole.' });
     }
@@ -248,8 +248,8 @@ app.put('/api/completed-jobs/:id', (req, res) => {
     const netProfit = price - expenses;
 
     db.run(
-        `UPDATE completed_jobs SET work_done = ?, cost_expenses = ?, final_price = ?, net_profit = ? WHERE id = ?`,
-        [work_done.trim(), expenses, price, netProfit, req.params.id],
+        `UPDATE completed_jobs SET work_done = ?, cost_expenses = ?, final_price = ?, net_profit = ?, completed_by = ? WHERE id = ?`,
+        [work_done.trim(), expenses, price, netProfit, completed_by ? completed_by.trim() : 'Neznámý', req.params.id],
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ message: 'Zakázka v archivu aktualizována', netProfit });
@@ -257,7 +257,6 @@ app.put('/api/completed-jobs/:id', (req, res) => {
     );
 });
 
-// Smazání zakázky z archivu
 app.delete('/api/completed-jobs/:id', (req, res) => {
     const { id } = req.params;
     db.run("DELETE FROM completed_jobs WHERE id = ?", [id], function(err) {
@@ -267,7 +266,7 @@ app.delete('/api/completed-jobs/:id', (req, res) => {
 });
 
 app.post('/api/vehicles', (req, res) => {
-    let { spz, model, status, note, phone, user, workDone, costExpenses, finalPrice } = req.body;
+    let { spz, model, status, note, phone, user, mechanic, workDone, costExpenses, finalPrice } = req.body;
     if (!spz || !model || !status || !phone) {
         return res.status(400).json({ error: 'Vyplňte všechna povinná pole včetně telefonu.' });
     }
@@ -275,6 +274,7 @@ app.post('/api/vehicles', (req, res) => {
     spz = spz.trim().toUpperCase();
     phone = phone.trim();
     const shortUser = user ? user.trim() : 'mechanik';
+    const assignedMechanic = mechanic ? mechanic.trim() : shortUser;
     const cleanNote = note || '';
 
     if (status === 'Opraveno - připraveno k vyzvednutí') {
@@ -303,7 +303,7 @@ app.post('/api/vehicles', (req, res) => {
         db.run(
             `INSERT INTO completed_jobs (spz, model, phone, work_done, cost_expenses, final_price, net_profit, completed_by, completed_at) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [spz, model, phone, workDone.trim(), expenses, price, netProfit, shortUser, completedAt],
+            [spz, model, phone, workDone.trim(), expenses, price, netProfit, assignedMechanic, completedAt],
             (err) => {
                 if (err) return res.status(500).json({ error: err.message });
 
@@ -315,17 +315,18 @@ app.post('/api/vehicles', (req, res) => {
         );
     } else {
         const query = `
-            INSERT INTO vehicles (spz, model, status, note, phone, created_by, updated_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO vehicles (spz, model, status, note, phone, created_by, updated_by, mechanic)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(spz) DO UPDATE SET
                 model = excluded.model,
                 status = excluded.status,
                 note = excluded.note,
                 phone = excluded.phone,
-                updated_by = excluded.updated_by
+                updated_by = excluded.updated_by,
+                mechanic = excluded.mechanic
         `;
 
-        db.run(query, [spz, model, status, cleanNote, phone, shortUser, shortUser], function(err) {
+        db.run(query, [spz, model, status, cleanNote, phone, shortUser, shortUser, assignedMechanic], function(err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ message: 'Vozidlo úspěšně uloženo', action: 'saved' });
         });
@@ -536,7 +537,7 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// --- ADMINISTRACE S ARCHIVEM, VYHLEDÁVÁNÍM A FINANCOVÁNÍM ( /admin.html ) ---
+// --- ADMINISTRACE S PŘIŘAZOVÁNÍM MECHANIKŮ A GRAFY V KARTÁCH ( /admin.html ) ---
 app.get('/admin.html', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -567,6 +568,11 @@ app.get('/admin.html', (req, res) => {
         .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 13px; border-bottom: 1px solid #334155; padding-bottom: 8px; }
         .error-msg { color: #f87171; font-size: 14px; margin-top: 5px; }
         .calendar-box { background: #0f172a; padding: 10px; border-radius: 6px; border: 1px solid #334155; font-family: monospace; font-size: 13px; color: #38bdf8; word-break: break-all; margin-top: 5px; user-select: all; }
+        
+        /* Styly pro vizuální grafy v kartách mechaniků */
+        .progress-bar-container { background: #334155; border-radius: 4px; overflow: hidden; height: 12px; margin: 8px 0; display: flex; }
+        .progress-fill-profit { background: #16a34a; height: 100%; transition: width 0.3s; }
+        .progress-fill-cost { background: #dc2626; height: 100%; transition: width 0.3s; }
     </style>
 </head>
 <body>
@@ -613,6 +619,12 @@ app.get('/admin.html', (req, res) => {
                 <div class="form-group">
                     <label>Telefon na zákazníka (povinné):</label>
                     <input type="tel" id="phone" required placeholder="+420 123 456 789">
+                </div>
+                <div class="form-group">
+                    <label>Přiřadit mechanikovi:</label>
+                    <select id="assignedMechanic" required>
+                        <!-- Naplní se dynamicky ze seznamu uživatelů -->
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Stav opravy:</label>
@@ -686,6 +698,10 @@ app.get('/admin.html', (req, res) => {
         <h3>Seznam vozidel v kartách</h3>
         <div id="mechanicCardList" class="card-list"></div>
 
+        <!-- STATISTIKY A KARTY MECHANIKŮ (S GRAFY) -->
+        <h3 style="margin-top: 30px; color: #38bdf8;">📊 Výkon a finance mechaniků</h3>
+        <div id="mechanicsStatsContainer" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;"></div>
+
         <!-- TRVALÝ ARCHIV DOKONČENÝCH ZAKÁZEK S VYHLEDÁVÁNÍM -->
         <h3 style="margin-top: 30px; color: #16a34a;">📂 Trvalý archiv dokončených zakázek</h3>
         <div class="form-group" style="margin-top: 10px;">
@@ -699,6 +715,7 @@ app.get('/admin.html', (req, res) => {
     let currentUser = '';
     let allVehicles = [];
     let completedJobs = [];
+    let allUsers = [];
     let attendanceInterval = null;
 
     document.getElementById('calendar-link-box').innerText = window.location.origin + '/calendar.ics';
@@ -755,7 +772,7 @@ app.get('/admin.html', (req, res) => {
                 if (attendanceInterval) clearInterval(attendanceInterval);
             }
 
-            loadData();
+            loadUsersAndData();
         } catch (err) {
             errorEl.innerText = 'Chyba připojení k serveru.';
         }
@@ -766,7 +783,20 @@ app.get('/admin.html', (req, res) => {
         location.reload();
     }
 
-    function loadData() {
+    async function loadUsersAndData() {
+        try {
+            const usersRes = await fetch('/api/users');
+            allUsers = await usersRes.json();
+            
+            // Naplnění selectu pro přiřazení mechanika
+            const mechSelect = document.getElementById('assignedMechanic');
+            mechSelect.innerHTML = allUsers.map(u => \`<option value="\${u.username}">\${u.username}</option>\`).join('');
+            // Předvybrat aktuálního uživatele
+            mechSelect.value = currentUser;
+        } catch (e) {
+            console.error('Chyba při načítání uživatelů');
+        }
+
         fetch('/api/vehicles')
             .then(res => res.json())
             .then(data => {
@@ -779,6 +809,7 @@ app.get('/admin.html', (req, res) => {
             .then(data => {
                 completedJobs = data;
                 renderCompletedArchive();
+                renderMechanicsStats();
             });
     }
 
@@ -790,6 +821,7 @@ app.get('/admin.html', (req, res) => {
             spz: document.getElementById('spz').value.trim(),
             model: document.getElementById('model').value.trim(),
             phone: document.getElementById('phone').value.trim(),
+            mechanic: document.getElementById('assignedMechanic').value,
             status: statusVal,
             note: document.getElementById('note').value.trim(),
             user: currentUser,
@@ -814,7 +846,8 @@ app.get('/admin.html', (req, res) => {
             }
             document.getElementById('vehicleForm').reset();
             document.getElementById('financeFields').classList.add('hidden');
-            loadData();
+            document.getElementById('assignedMechanic').value = currentUser;
+            loadUsersAndData();
         });
     }
 
@@ -830,25 +863,108 @@ app.get('/admin.html', (req, res) => {
             const smsText = encodeURIComponent('Dobrý den, vaše vozidlo (' + car.spz + ') je v stavu: ' + car.status + '. Děkuji.');
             const safeModel = (car.model || '').replace(/'/g, "\\\\'");
             const safeNote = (car.note || '').replace(/'/g, "\\\\\\'").replace(/\\n/g, ' ');
+            const assignedMech = car.mechanic || '-';
             
             container.innerHTML += \`
                 <div class="car-card">
                     <div class="car-header">
                         <span>\${car.spz}</span>
-                        <span style="font-size: 13px; color: #94a3b8; font-weight: normal;">\${car.model}</span>
+                        <span style="font-size: 13px; color: #38bdf8; font-weight: normal;">\${car.model}</span>
                     </div>
                     <div class="car-row"><strong>Stav:</strong> <span style="color:#38bdf8;">\${car.status}</span></div>
+                    <div class="car-row"><strong>Přiřazeno mechanikovi:</strong> <span style="color: #16a34a; font-weight: bold;">\${assignedMech}</span></div>
                     <div class="car-row"><strong>Telefon:</strong> <a href="tel:\${car.phone}" style="color: #38bdf8;">\${car.phone}</a></div>
                     <div class="car-row"><strong>Poznámka:</strong> \${car.note || '-'}</div>
-                    <div class="car-row" style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Uložil/Upravil: \${car.updated_by || '-'}</div>
+                    <div class="car-row" style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Založil/Upravil: \${car.updated_by || '-'}</div>
                     
                     <div class="card-actions-row">
                         <a href="tel:\${car.phone}" class="btn-call">📞 Zavolat</a>
                         <a href="sms:\${car.phone}?body=\${smsText}" class="btn-sms">💬 SMS</a>
-                        <button class="btn-edit" onclick="editCar('\${car.spz}', '\${safeModel}', '\${car.status}', '\${safeNote}', '\${car.phone}')">Upravit</button>
+                        <button class="btn-edit" onclick="editCar('\${car.spz}', '\${safeModel}', '\${car.status}', '\${safeNote}', '\${car.phone}', '\${assignedMech}')">Upravit</button>
                         <button class="btn-delete" onclick="deleteCar(\${car.id})">Smazat</button>
                     </div>
                 </div>
+            \`;
+        });
+    }
+
+    function renderMechanicsStats() {
+        const statsContainer = document.getElementById('mechanicsStatsContainer');
+        statsContainer.innerHTML = '';
+
+        // Určení, které karty zobrazit:
+        // Pokud je uživatel StSi (admin), uvidí všechny mechaniky. Jinak uvidí jen sám sebe.
+        const isAdmin = currentUser.toLowerCase() === 'stsi';
+        let targetUsers = isAdmin ? allUsers : allUsers.filter(u => u.username.toLowerCase() === currentUser.toLowerCase());
+
+        if (targetUsers.length === 0) {
+            targetUsers = [{ username: currentUser }];
+        }
+
+        targetUsers.forEach(userObj => {
+            const mechName = userObj.username;
+            // Filtrovat dokončené zakázky tohoto mechanika
+            const mechJobs = completedJobs.filter(j => j.completed_by && j.completed_by.toLowerCase() === mechName.toLowerCase());
+            // Filtrovat aktivní zakázky přiřazené tomuto mechanikovi
+            const mechActive = allVehicles.filter(v => v.mechanic && v.mechanic.toLowerCase() === mechName.toLowerCase());
+
+            let totalExpenses = 0;
+            let totalRevenue = 0;
+            let totalProfit = 0;
+
+            mechJobs.forEach(j => {
+                totalExpenses += j.cost_expenses;
+                totalRevenue += j.final_price;
+                totalProfit += j.net_profit;
+            });
+
+            // Výpočet poměru pro jednoduchý vizuální graf (sloupec)
+            let profitPercent = totalRevenue > 0 ? Math.max(0, Math.min(100, (totalProfit / totalRevenue) * 100)) : 0;
+            let costPercent = totalRevenue > 0 ? Math.max(0, Math.min(100, (totalExpenses / totalRevenue) * 100)) : 0;
+
+            let jobsHtml = '';
+            if (mechJobs.length === 0) {
+                jobsHtml = '<p style="color: #94a3b8; font-size: 13px;">Žádné dokončené zakázky.</p>';
+            } else {
+                jobsHtml = mechJobs.map(j => \`
+                    <div style="background: #0f172a; padding: 8px; margin-bottom: 6px; border-radius: 6px; border: 1px solid #334155; font-size: 13px;">
+                        <div><strong>\${j.spz}</strong> (\${j.model}) - <span style="color: #16a34a;">Zisk: \${j.net_profit} Kč</span></div>
+                        <div style="color: #94a3b8; font-size: 12px;">Práce: \${j.work_done} | Náklady: \${j.cost_expenses} Kč | Cena: \${j.final_price} Kč</div>
+                    </div>
+                \`).join('');
+            }
+
+            statsContainer.innerHTML += \`
+                <details style="background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; cursor: pointer;">
+                    <summary style="font-weight: bold; color: #38bdf8; outline: none; display: flex; justify-content: space-between; align-items: center;">
+                        <span>👤 Mechanik: \${mechName}</span>
+                        <span style="font-size: 13px; color: #16a34a;">Celkový zisk: \${totalProfit} Kč</span>
+                    </summary>
+                    <div style="margin-top: 12px; cursor: default; border-top: 1px solid #334155; pt: 10px;" onclick="event.stopPropagation()">
+                        <div style="display: flex; gap: 15px; font-size: 13px; margin-bottom: 10px; color: #cbd5e1;">
+                            <div>📦 Dokončeno zakázek: <strong>\${mechJobs.length}</strong></div>
+                            <div>🚗 Aktivních v servisu: <strong>\${mechActive.length}</strong></div>
+                        </div>
+                        <div style="font-size: 13px; margin-bottom: 8px;">
+                            <div>💸 Celkové náklady: <strong style="color: #f87171;">\${totalExpenses} Kč</strong></div>
+                            <div>💵 Celkové tržby: <strong style="color: #38bdf8;">\${totalRevenue} Kč</strong></div>
+                        </div>
+
+                        <!-- Vizuální graf / poměr nákladů a zisku -->
+                        <div style="font-size: 12px; color: #94a3b8; margin-top: 6px;">Vizuální poměr (Náklady vs Čistý zisk z tržeb):</div>
+                        <div class="progress-bar-container">
+                            <div class="progress-fill-profit" style="width: \${profitPercent}%;" title="Čistý zisk \${profitPercent.toFixed(1)}%"></div>
+                            <div class="progress-fill-cost" style="width: \${costPercent}%;" title="Náklady \${costPercent.toFixed(1)}%"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; margin-bottom: 12px;">
+                            <span style="color: #16a34a;">■ Zisk (\${totalProfit} Kč)</span>
+                            <span style="color: #dc2626;">■ Náklady (\${totalExpenses} Kč)</span>
+                        </div>
+
+                        <h4 style="margin: 10px 0 5px 0; font-size: 13px; color: #38bdf8;">Seznam dokončených zakázek:</h4>
+                        <div>\${jobsHtml}</div>
+                    </div>
+                </details>
             \`;
         });
     }
@@ -878,13 +994,14 @@ app.get('/admin.html', (req, res) => {
                     </div>
                     <div class="car-row"><strong>Provedená práce:</strong> \${job.work_done}</div>
                     <div class="car-row"><strong>Náklady:</strong> \${job.cost_expenses} Kč | <strong>Cena pro zákazníka:</strong> \${job.final_price} Kč</div>
+                    <div class="car-row"><strong>Mechanik:</strong> <span style="color: #38bdf8; font-weight: bold;">\${job.completed_by}</span></div>
                     <div class="car-row"><strong>Telefon:</strong> <a href="tel:\${job.phone}" style="color: #38bdf8;">\${job.phone}</a></div>
                     <div class="car-row" style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Uzavřel: \${job.completed_by} | Datum: \${job.completed_at}</div>
 
                     <div class="card-actions-row" style="margin-top: 10px;">
                         <a href="tel:\${job.phone}" class="btn-call">📞 Zavolat</a>
                         <a href="sms:\${job.phone}?body=\${smsText}" class="btn-sms">💬 SMS</a>
-                        <button class="btn-edit" onclick="editCompletedJob(\${job.id}, '\${safeWorkDone}', \${job.cost_expenses}, \${job.final_price})">Upravit</button>
+                        <button class="btn-edit" onclick="editCompletedJob(\${job.id}, '\${safeWorkDone}', \${job.cost_expenses}, \${job.final_price}, '\${job.completed_by}')">Upravit</button>
                         <button class="btn-delete" onclick="deleteCompletedJob(\${job.id})">Smazat</button>
                     </div>
                 </div>
@@ -892,13 +1009,15 @@ app.get('/admin.html', (req, res) => {
         });
     }
 
-    function editCompletedJob(id, currentWork, currentCost, currentPrice) {
+    function editCompletedJob(id, currentWork, currentCost, currentPrice, currentMech) {
         const newWork = prompt('Upravit provedenou práci:', currentWork);
         if (newWork === null) return;
         const newCost = prompt('Upravit náklady (Kč):', currentCost);
         if (newCost === null) return;
         const newPrice = prompt('Upravit konečnou cenu pro zákazníka (Kč):', currentPrice);
         if (newPrice === null) return;
+        const newMech = prompt('Upravit jméno mechanika:', currentMech);
+        if (newMech === null) return;
 
         fetch('/api/completed-jobs/' + id, {
             method: 'PUT',
@@ -906,7 +1025,8 @@ app.get('/admin.html', (req, res) => {
             body: JSON.stringify({
                 work_done: newWork,
                 cost_expenses: parseFloat(newCost) || 0,
-                final_price: parseFloat(newPrice) || 0
+                final_price: parseFloat(newPrice) || 0,
+                completed_by: newMech
             })
         })
         .then(res => res.json())
@@ -916,7 +1036,7 @@ app.get('/admin.html', (req, res) => {
                 return;
             }
             alert('Zakázka v archivu upravena! Nový čistý zisk: ' + res.netProfit + ' Kč');
-            loadData();
+            loadUsersAndData();
         });
     }
 
@@ -924,22 +1044,23 @@ app.get('/admin.html', (req, res) => {
         if (!confirm('Opravdu chcete smazat tuto zakázku z trvalého archivu?')) return;
         fetch('/api/completed-jobs/' + id, { method: 'DELETE' })
             .then(res => res.json())
-            .then(() => loadData());
+            .then(() => loadUsersAndData());
     }
 
-    function editCar(spz, model, status, note, phone) {
+    function editCar(spz, model, status, note, phone, mechanic) {
         document.getElementById('spz').value = spz;
         document.getElementById('model').value = model;
         document.getElementById('status').value = status;
         document.getElementById('note').value = note === '-' ? '' : note;
         document.getElementById('phone').value = phone;
+        document.getElementById('assignedMechanic').value = mechanic;
         toggleFinanceFields();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function deleteCar(id) {
         if (!confirm('Opravdu smazat aktivní vozidlo ze servisu?')) return;
-        fetch('/api/vehicles/' + id, { method: 'DELETE' }).then(() => loadData());
+        fetch('/api/vehicles/' + id, { method: 'DELETE' }).then(() => loadUsersAndData());
     }
 
     async function loadAttendanceSummary() {
