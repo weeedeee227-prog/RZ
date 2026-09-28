@@ -103,6 +103,7 @@
             <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; border: 1px solid #16a34a;">
                 <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📱 Správa NFC zařízení (Docházka)</h3>
                 <p style="color: #666; font-size: 13px; margin-bottom: 10px;">Zde spárujte telefony umístěné u NFC tagů. Token zjistíte tak, že na novém telefonu otevřete adresu <code style="color:#0066cc;">/nfc</code>.</p>
+                
                 <form id="new-device-form">
                     <div class="form-group">
                         <label>Token zařízení:</label>
@@ -114,7 +115,9 @@
                     </div>
                     <button type="submit" class="btn" style="background: #16a34a;">Schválit a přidat zařízení</button>
                 </form>
-                <div id="nfc-devices-list" style="margin-top: 15px;">Načítání zařízení...</div>
+
+                <h3 style="color: #333; font-size: 14px; margin-top: 15px;">Seznam schválených zařízení:</h3>
+                <div id="nfc-devices-list" style="margin-top: 10px;">Načítání zařízení...</div>
             </div>
         </div>
 
