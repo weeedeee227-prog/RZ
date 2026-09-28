@@ -32,7 +32,7 @@ module.exports = function(db) {
         });
     });
 
-    // Automatický zápis přes NFC (podle spárovaného zařízení)
+    // Automatický zápis přes NFC (pouze pro předem schválená zařízení)
     router.post('/nfc-tap', (req, res) => {
         const { deviceToken, type } = req.body;
         if (!deviceToken) return res.status(400).json({ error: 'Chybí token zařízení.' });
@@ -40,8 +40,9 @@ module.exports = function(db) {
         db.get("SELECT username FROM devices WHERE device_token = ?", [deviceToken], (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
             
+            // Pokud zařízení není v databázi, okamžitě přístup odmítneme
             if (!row) {
-                return res.status(404).json({ needsRegistration: true });
+                return res.status(403).json({ error: 'Neznámé zařízení. Přístup odepřen.' });
             }
 
             const username = row.username;
@@ -70,7 +71,7 @@ module.exports = function(db) {
         });
     });
 
-    // Registrace zařízení (při prvním použití nebo přidání admina)
+    // Registrace zařízení (pro správu adminem)
     router.post('/register-device', (req, res) => {
         const { deviceToken, username, isAdmin } = req.body;
         if (!deviceToken || !username) return res.status(400).json({ error: 'Chybí údaje.' });
