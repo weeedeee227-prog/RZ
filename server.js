@@ -15,7 +15,7 @@ const db = new sqlite3.Database('./database.sqlite', (err) => {
 });
 
 db.serialize(() => {
-    // Tabulka vozidel
+    // Tabulka aktivních vozidel v servisu
     db.run(`CREATE TABLE IF NOT EXISTS vehicles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         spz TEXT UNIQUE NOT NULL,
@@ -25,6 +25,20 @@ db.serialize(() => {
         phone TEXT NOT NULL,
         created_by TEXT,
         updated_by TEXT
+    )`);
+
+    // Trvalá, nesmazatelná databáze (archiv) dokončených zakázek a financí
+    db.run(`CREATE TABLE IF NOT EXISTS completed_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        spz TEXT NOT NULL,
+        model TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        work_done TEXT NOT NULL,
+        cost_expenses REAL NOT NULL,
+        final_price REAL NOT NULL,
+        net_profit REAL NOT NULL,
+        completed_by TEXT NOT NULL,
+        completed_at TEXT NOT NULL
     )`);
 
     // Tabulka uživatelů pro mechaniky
@@ -115,7 +129,6 @@ app.delete('/api/attendance/devices/:token', (req, res) => {
     });
 });
 
-// Získání posledního stavu všech uživatelů pro administraci
 app.get('/api/attendance/latest', (req, res) => {
     const query = `
         SELECT a.* FROM attendance a
@@ -131,7 +144,6 @@ app.get('/api/attendance/latest', (req, res) => {
     });
 });
 
-// Hlavní akce pípnutí NFC (střídá Příchod / Odchod a zapisuje správný čas v ČR)
 app.post('/api/attendance/nfc-tap', (req, res) => {
     const { deviceToken } = req.body;
     if (!deviceToken) return res.status(400).json({ error: 'Chybí token zařízení.' });
@@ -149,7 +161,6 @@ app.post('/api/attendance/nfc-tap', (req, res) => {
 
             const nextType = (lastLog && lastLog.type === 'Příchod') ? 'Odchod' : 'Příchod';
             
-            // Vynucení správného českého času (vyřeší posun o 2 hodiny zpět)
             const now = new Date();
             const formatter = new Intl.DateTimeFormat('en-US', {
                 timeZone: 'Europe/Prague',
@@ -182,7 +193,7 @@ app.post('/api/attendance/nfc-tap', (req, res) => {
     });
 });
 
-// --- GENERÁTOR ICS KALENDÁŘE (/calendar.ics) ---
+// --- GENERÁTOR ICS KALENDÁŘE ---
 app.get('/calendar.ics', (req, res) => {
     db.all("SELECT * FROM attendance ORDER BY id DESC", [], (err, rows) => {
         if (err) return res.status(500).send('Chyba databáze');
@@ -211,7 +222,101 @@ app.get('/calendar.ics', (req, res) => {
     });
 });
 
-// --- SAMOSTATNÁ ROUTA PRO NFC (/nfc) S VIDITELNÝM TOKENEM ---
+// --- API ENDPOINTY: VOZIDLA A ARCHIV ---
+app.get('/api/vehicles', (req, res) => {
+    db.all("SELECT * FROM vehicles ORDER BY id DESC", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Získání trvalého archivu hotových zakázek
+app.get('/api/completed-jobs', (req, res) => {
+    db.all("SELECT * FROM completed_jobs ORDER BY id DESC", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+app.post('/api/vehicles', (req, res) => {
+    let { spz, model, status, note, phone, user, workDone, costExpenses, finalPrice } = req.body;
+    if (!spz || !model || !status || !phone) {
+        return res.status(400).json({ error: 'Vyplňte všechna povinná pole včetně telefonu.' });
+    }
+
+    spz = spz.trim().toUpperCase();
+    phone = phone.trim();
+    const shortUser = user ? user.trim() : 'mechanik';
+    const cleanNote = note || '';
+
+    // Pokud je stav "Opraveno - připraveno k vyzvednutí", přesuneme/uložíme auto do pevného archivu hotových zakázek
+    if (status === 'Opraveno - připraveno k vyzvednutí') {
+        if (!workDone || costExpenses === undefined || finalPrice === undefined) {
+            return res.status(400).json({ error: 'Pro dokončení zakázky je nutné vyplnit provedenou práci, náklady a konečnou cenu pro zákazníka!' });
+        }
+
+        const expenses = parseFloat(costExpenses) || 0;
+        const price = parseFloat(finalPrice) || 0;
+        const netProfit = price - expenses;
+
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Europe/Prague',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+        const parts = formatter.formatToParts(now);
+        const getPart = (type) => parts.find(p => p.type === type)?.value || '';
+        const completedAt = `${getPart('year')}-${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}`;
+
+        // 1. Vložit do nesmazatelného archivu
+        db.run(
+            `INSERT INTO completed_jobs (spz, model, phone, work_done, cost_expenses, final_price, net_profit, completed_by, completed_at) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [spz, model, phone, workDone.trim(), expenses, price, netProfit, shortUser, completedAt],
+            (err) => {
+                if (err) return res.status(500).json({ error: err.message });
+
+                // 2. Smazat z aktivních vozidel v servisu (pokud tam bylo)
+                db.run("DELETE FROM vehicles WHERE spz = ?", [spz], (err) => {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({ message: 'Zakázka úspěšně dokončena a uložena do trvalého archivu!', netProfit });
+                });
+            }
+        );
+    } else {
+        // Běžné uložení / aktualizace aktivního vozidla v servisu
+        const query = `
+            INSERT INTO vehicles (spz, model, status, note, phone, created_by, updated_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(spz) DO UPDATE SET
+                model = excluded.model,
+                status = excluded.status,
+                note = excluded.note,
+                phone = excluded.phone,
+                updated_by = excluded.updated_by
+        `;
+
+        db.run(query, [spz, model, status, cleanNote, phone, shortUser, shortUser], function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Vozidlo úspěšně uloženo', action: 'saved' });
+        });
+    }
+});
+
+app.delete('/api/vehicles/:id', (req, res) => {
+    const { id } = req.params;
+    db.run("DELETE FROM vehicles WHERE id = ?", [id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Vozidlo smazáno' });
+    });
+});
+
+// --- ROUTA PRO NFC STRÁNKU ---
 app.get('/nfc', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -231,14 +336,11 @@ app.get('/nfc', (req, res) => {
     <div class="container">
         <div class="card">
             <h2>⏱️ PofelGarage Docházka</h2>
-            
             <div style="margin: 15px 0; text-align: left;">
                 <label style="font-size: 12px; color: #94a3b8; font-weight: bold;">Token tohoto zařízení:</label>
                 <div id="token-box" class="token-box">Načítání...</div>
             </div>
-
             <div id="status-msg" style="margin-top: 15px; color: #94a3b8; font-size: 15px;">Zpracovávám docházku...</div>
-            
             <div id="result-section" style="display: none;">
                 <h1 id="res-username" style="color: #38bdf8; margin: 10px 0;"></h1>
                 <div><span id="res-type" class="badge"></span></div>
@@ -246,14 +348,12 @@ app.get('/nfc', (req, res) => {
             </div>
         </div>
     </div>
-
     <script>
         let deviceToken = localStorage.getItem('deviceToken');
         if (!deviceToken) {
             deviceToken = 'dev_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
             localStorage.setItem('deviceToken', deviceToken);
         }
-        
         document.getElementById('token-box').innerText = deviceToken;
 
         async function tapNfc() {
@@ -283,10 +383,9 @@ app.get('/nfc', (req, res) => {
                     statusMsg.innerHTML = '<span style="color: #f87171;">Chyba: ' + (data.error || 'Neznámá chyba') + '</span>';
                 }
             } catch (err) {
-                document.getElementById('status-msg').innerHTML = '<span style="color: #f87171;">Chyba připojení k serveru.</span>';
+                statusMsg.innerHTML = '<span style="color: #f87171;">Chyba připojení k serveru.</span>';
             }
         }
-
         tapNfc();
     </script>
 </body>
@@ -306,49 +405,6 @@ app.post('/api/login', (req, res) => {
             return res.status(401).json({ error: 'Nesprávné jméno nebo heslo.' });
         }
         res.json({ message: 'Přihlášení úspěšné', username: row.username });
-    });
-});
-
-app.get('/api/vehicles', (req, res) => {
-    db.all("SELECT * FROM vehicles ORDER BY id DESC", [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
-});
-
-app.post('/api/vehicles', (req, res) => {
-    let { spz, model, status, note, phone, user } = req.body;
-    if (!spz || !model || !status || !phone) {
-        return res.status(400).json({ error: 'Vyplňte všechna povinná pole včetně telefonu.' });
-    }
-
-    spz = spz.trim().toUpperCase();
-    phone = phone.trim();
-    const shortUser = user ? user.trim() : 'mechanik';
-    const cleanNote = note || '';
-
-    const query = `
-        INSERT INTO vehicles (spz, model, status, note, phone, created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(spz) DO UPDATE SET
-            model = excluded.model,
-            status = excluded.status,
-            note = excluded.note,
-            phone = excluded.phone,
-            updated_by = excluded.updated_by
-    `;
-
-    db.run(query, [spz, model, status, cleanNote, phone, shortUser, shortUser], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Vozidlo úspěšně uloženo', action: 'saved' });
-    });
-});
-
-app.delete('/api/vehicles/:id', (req, res) => {
-    const { id } = req.params;
-    db.run("DELETE FROM vehicles WHERE id = ?", [id], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Vozidlo smazáno' });
     });
 });
 
@@ -409,7 +465,6 @@ app.get('/', (req, res) => {
             <h2>🚗 PofelGarage - Stav vozidla</h2>
             <a href="/admin.html" class="admin-link">🔒 Mechanici</a>
         </div>
-
         <div class="card">
             <h3>Zadejte SPZ vašeho vozidla</h3>
             <p class="info-text">Zadejte registrační značku (např. 1AB2345) pro zobrazení aktuálního stavu opravy.</p>
@@ -418,10 +473,8 @@ app.get('/', (req, res) => {
                 <button type="submit">Zobrazit stav</button>
             </form>
         </div>
-
         <div id="result-container"></div>
     </div>
-
     <script>
         document.getElementById('search-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -459,7 +512,7 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// --- ADMINISTRACE S ODKAZEM NA KALENDÁŘ A SBAZOVACÍ NFC KARTOU ( /admin.html ) ---
+// --- ADMINISTRACE S ARCHIVEM A FINANCOVÁNÍM ( /admin.html ) ---
 app.get('/admin.html', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -523,7 +576,7 @@ app.get('/admin.html', (req, res) => {
         <h1>Správa zakázek</h1>
 
         <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;">
-            <h3 style="margin-top:0; font-size:15px;">Přidat vozidlo</h3>
+            <h3 id="formTitle" style="margin-top:0; font-size:15px;">Přidat vozidlo / Upravit</h3>
             <form id="vehicleForm" onsubmit="saveVehicle(event)">
                 <div class="form-group">
                     <label>SPZ:</label>
@@ -539,23 +592,41 @@ app.get('/admin.html', (req, res) => {
                 </div>
                 <div class="form-group">
                     <label>Stav opravy:</label>
-                    <select id="status" required>
+                    <select id="status" required onchange="toggleFinanceFields()">
                         <option value="Přijato do servisu">Přijato do servisu</option>
                         <option value="Probíhá oprava">Probíhá oprava</option>
                         <option value="Čeká se na díly">Čeká se na díly</option>
-                        <option value="Opraveno - připraveno k vyzvednutí">Opraveno - připraveno k vyzvednutí</option>
+                        <option value="Opraveno - připraveno k vyzvednutí">Opraveno - připraveno k vyzvednutí (Dokončit)</option>
                         <option value="Vozidlo se nenachází v servise">Vozidlo se nenachází v servise</option>
                     </select>
                 </div>
+
+                <!-- DOKONČOVACÍ FINANČNÍ SEKCE (Zobrazí se automaticky při výběru hotovo) -->
+                <div id="financeFields" class="hidden" style="background: #1e293b; padding: 12px; border-radius: 6px; border: 1px solid #16a34a; margin-bottom: 12px;">
+                    <h4 style="margin: 0 0 10px 0; color: #16a34a; font-size: 14px;">💰 Finanční uzávěrka zakázky</h4>
+                    <div class="form-group">
+                        <label>Popis provedené práce:</label>
+                        <textarea id="workDone" rows="2" placeholder="Např. výměna brzdových destiček, olej..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Náklady (materiál / díly) v Kč:</label>
+                        <input type="number" step="0.01" id="costExpenses" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Konečná částka placená zákazníkem v Kč:</label>
+                        <input type="number" step="0.01" id="finalPrice" placeholder="0">
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label>Poznámka:</label>
                     <textarea id="note" rows="2"></textarea>
                 </div>
-                <button type="submit" class="btn">Uložit do karet</button>
+                <button type="submit" class="btn">Uložit do karet / Dokončit</button>
             </form>
         </div>
 
-        <!-- SBAZOVACÍ SEKCE NFC A KALENDÁŘE (Zobrazí se POUZE pro StSi) -->
+        <!-- SBAZOVACÍ SEKCE NFC A KALENDÁŘE (Pouze pro StSi) -->
         <div id="nfcManagementContainer" class="hidden" style="margin-bottom: 20px;">
             <details style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #16a34a; cursor: pointer;">
                 <summary style="font-size: 15px; font-weight: bold; color: #16a34a; outline: none; user-select: none;">
@@ -564,7 +635,6 @@ app.get('/admin.html', (req, res) => {
                 
                 <div style="margin-top: 12px; cursor: default;" onclick="event.stopPropagation()">
                     <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📅 Odkaz na kalendář docházky</h3>
-                    <p style="color: #94a3b8; font-size: 13px; margin-bottom: 5px;">Zkopírujte tento odkaz a přidejte si ho do svého Google Kalendáře / Apple Kalendáře jako odebíraný kalendář:</p>
                     <div id="calendar-link-box" class="calendar-box">Načítám odkaz...</div>
 
                     <h3 style="margin-top:15px; font-size:15px; color: #16a34a;">📱 Správa NFC zařízení</h3>
@@ -591,16 +661,36 @@ app.get('/admin.html', (req, res) => {
 
         <h3>Seznam vozidel v kartách</h3>
         <div id="mechanicCardList" class="card-list"></div>
+
+        <!-- TRVALÝ ARCHIV DOKONČENÝCH ZAKÁZEK A ZISKŮ -->
+        <h3 style="margin-top: 30px; color: #16a34a;">📂 Trvalý archiv dokončených zakázek</h3>
+        <div id="completedArchiveList" class="card-list"></div>
     </div>
 </div>
 
 <script>
     let currentUser = '';
     let allVehicles = [];
+    let completedJobs = [];
     let attendanceInterval = null;
 
-    // Automaticky vyplní aktuální URL kalendáře
     document.getElementById('calendar-link-box').innerText = window.location.origin + '/calendar.ics';
+
+    function toggleFinanceFields() {
+        const statusVal = document.getElementById('status').value;
+        const financeBox = document.getElementById('financeFields');
+        if (statusVal === 'Opraveno - připraveno k vyzvednutí') {
+            financeBox.classList.remove('hidden');
+            document.getElementById('workDone').required = true;
+            document.getElementById('costExpenses').required = true;
+            document.getElementById('finalPrice').required = true;
+        } else {
+            financeBox.classList.add('hidden');
+            document.getElementById('workDone').required = false;
+            document.getElementById('costExpenses').required = false;
+            document.getElementById('finalPrice').required = false;
+        }
+    }
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -632,7 +722,7 @@ app.get('/admin.html', (req, res) => {
                 loadAttendanceSummary();
 
                 if (attendanceInterval) clearInterval(attendanceInterval);
-                attendanceInterval = setInterval(loadAttendanceSummary, 1000); // Polling každou 1 vteřinu
+                attendanceInterval = setInterval(loadAttendanceSummary, 1000);
             } else {
                 document.getElementById('nfcManagementContainer').classList.add('hidden');
                 if (attendanceInterval) clearInterval(attendanceInterval);
@@ -656,23 +746,35 @@ app.get('/admin.html', (req, res) => {
                 allVehicles = data;
                 renderMechanicCards();
             });
+
+        fetch('/api/completed-jobs')
+            .then(res => res.json())
+            .then(data => {
+                completedJobs = data;
+                renderCompletedArchive();
+            });
     }
 
     function saveVehicle(e) {
         e.preventDefault();
-        const data = {
+        const statusVal = document.getElementById('status').value;
+        
+        const payload = {
             spz: document.getElementById('spz').value.trim(),
             model: document.getElementById('model').value.trim(),
             phone: document.getElementById('phone').value.trim(),
-            status: document.getElementById('status').value,
+            status: statusVal,
             note: document.getElementById('note').value.trim(),
-            user: currentUser
+            user: currentUser,
+            workDone: document.getElementById('workDone').value.trim(),
+            costExpenses: document.getElementById('costExpenses').value,
+            finalPrice: document.getElementById('finalPrice').value
         };
 
         fetch('/api/vehicles', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            body: JSON.stringify(payload)
         })
         .then(res => res.json())
         .then(res => {
@@ -680,7 +782,11 @@ app.get('/admin.html', (req, res) => {
                 alert(res.error);
                 return;
             }
+            if (statusVal === 'Opraveno - připraveno k vyzvednutí') {
+                alert('Zakázka dokončena! Čistý zisk: ' + res.netProfit + ' Kč. Uloženo do trvalého archivu.');
+            }
             document.getElementById('vehicleForm').reset();
+            document.getElementById('financeFields').classList.add('hidden');
             loadData();
         });
     }
@@ -688,7 +794,7 @@ app.get('/admin.html', (req, res) => {
     function renderMechanicCards() {
         const container = document.getElementById('mechanicCardList');
         if (allVehicles.length === 0) {
-            container.innerHTML = '<p style="text-align:center; color:#94a3b8;">Žádná vozidla v databázi.</p>';
+            container.innerHTML = '<p style="text-align:center; color:#94a3b8;">Žádná aktivní vozidla v servisu.</p>';
             return;
         }
 
@@ -720,21 +826,45 @@ app.get('/admin.html', (req, res) => {
         });
     }
 
+    function renderCompletedArchive() {
+        const container = document.getElementById('completedArchiveList');
+        if (completedJobs.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:#94a3b8;">Zatím žádné uzavřené zakázky v archivu.</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        completedJobs.forEach(job => {
+            container.innerHTML += \`
+                <div class="car-card" style="border-color: #16a34a;">
+                    <div class="car-header">
+                        <span>\${job.spz} (\${job.model})</span>
+                        <span style="font-size: 12px; color: #16a34a; font-weight: bold;">Zisk: \${job.net_profit} Kč</span>
+                    </div>
+                    <div class="car-row"><strong>Provedená práce:</strong> \${job.work_done}</div>
+                    <div class="car-row"><strong>Náklady:</strong> \${job.cost_expenses} Kč | <strong>Cena pro zákazníka:</strong> \${job.final_price} Kč</div>
+                    <div class="car-row"><strong>Telefon:</strong> <a href="tel:\${job.phone}" style="color: #38bdf8;">\${job.phone}</a></div>
+                    <div class="car-row" style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Uzavřel: \${job.completed_by} | Datum: \${job.completed_at}</div>
+                </div>
+            \`;
+        });
+    }
+
     function editCar(spz, model, status, note, phone) {
         document.getElementById('spz').value = spz;
         document.getElementById('model').value = model;
         document.getElementById('status').value = status;
         document.getElementById('note').value = note === '-' ? '' : note;
         document.getElementById('phone').value = phone;
+        toggleFinanceFields();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function deleteCar(id) {
-        if (!confirm('Opravdu smazat vozidlo?')) return;
+        if (!confirm('Opravdu smazat aktivní vozidlo ze servisu?')) return;
         fetch('/api/vehicles/' + id, { method: 'DELETE' }).then(() => loadData());
     }
 
-    // --- SPRÁVA DOCHÁZKY A NFC ZAŘÍZENÍ ---
     async function loadAttendanceSummary() {
         try {
             const res = await fetch('/api/attendance/latest');
@@ -793,7 +923,7 @@ app.get('/admin.html', (req, res) => {
             });
             
             if (res.ok) {
-                document.getElementById('new-device-form').reset();
+                document.getElementById('new-device-form().reset();
                 loadNfcDevices();
                 alert('Zařízení bylo úspěšně autorizováno!');
             } else {
