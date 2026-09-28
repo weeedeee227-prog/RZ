@@ -230,7 +230,6 @@ app.get('/api/vehicles', (req, res) => {
     });
 });
 
-// Získání trvalého archivu hotových zakázek
 app.get('/api/completed-jobs', (req, res) => {
     db.all("SELECT * FROM completed_jobs ORDER BY id DESC", [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -249,7 +248,6 @@ app.post('/api/vehicles', (req, res) => {
     const shortUser = user ? user.trim() : 'mechanik';
     const cleanNote = note || '';
 
-    // Pokud je stav "Opraveno - připraveno k vyzvednutí", přesuneme/uložíme auto do pevného archivu hotových zakázek
     if (status === 'Opraveno - připraveno k vyzvednutí') {
         if (!workDone || costExpenses === undefined || finalPrice === undefined) {
             return res.status(400).json({ error: 'Pro dokončení zakázky je nutné vyplnit provedenou práci, náklady a konečnou cenu pro zákazníka!' });
@@ -273,7 +271,6 @@ app.post('/api/vehicles', (req, res) => {
         const getPart = (type) => parts.find(p => p.type === type)?.value || '';
         const completedAt = `${getPart('year')}-${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}`;
 
-        // 1. Vložit do nesmazatelného archivu
         db.run(
             `INSERT INTO completed_jobs (spz, model, phone, work_done, cost_expenses, final_price, net_profit, completed_by, completed_at) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -281,7 +278,6 @@ app.post('/api/vehicles', (req, res) => {
             (err) => {
                 if (err) return res.status(500).json({ error: err.message });
 
-                // 2. Smazat z aktivních vozidel v servisu (pokud tam bylo)
                 db.run("DELETE FROM vehicles WHERE spz = ?", [spz], (err) => {
                     if (err) return res.status(500).json({ error: err.message });
                     res.json({ message: 'Zakázka úspěšně dokončena a uložena do trvalého archivu!', netProfit });
@@ -289,7 +285,6 @@ app.post('/api/vehicles', (req, res) => {
             }
         );
     } else {
-        // Běžné uložení / aktualizace aktivního vozidla v servisu
         const query = `
             INSERT INTO vehicles (spz, model, status, note, phone, created_by, updated_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -601,7 +596,7 @@ app.get('/admin.html', (req, res) => {
                     </select>
                 </div>
 
-                <!-- DOKONČOVACÍ FINANČNÍ SEKCE (Zobrazí se automaticky při výběru hotovo) -->
+                <!-- DOKONČOVACÍ FINANČNÍ SEKCE -->
                 <div id="financeFields" class="hidden" style="background: #1e293b; padding: 12px; border-radius: 6px; border: 1px solid #16a34a; margin-bottom: 12px;">
                     <h4 style="margin: 0 0 10px 0; color: #16a34a; font-size: 14px;">💰 Finanční uzávěrka zakázky</h4>
                     <div class="form-group">
@@ -923,7 +918,7 @@ app.get('/admin.html', (req, res) => {
             });
             
             if (res.ok) {
-                document.getElementById('new-device-form().reset();
+                document.getElementById('new-device-form').reset();
                 loadNfcDevices();
                 alert('Zařízení bylo úspěšně autorizováno!');
             } else {
