@@ -531,7 +531,7 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// --- ADMINISTRACE S TRVALÝM PŘIHLÁŠENÍM ( /admin.html ) ---
+// --- ADMINISTRACE S PŘEPÍNATELNÝMI ZÁLOŽKAMI ( /admin.html ) ---
 app.get('/admin.html', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -542,7 +542,7 @@ app.get('/admin.html', (req, res) => {
     <style>
         * { box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 16px; }
-        .container { max-width: 600px; margin: auto; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid #334155; }
+        .container { max-width: 600px; margin: auto; }
         h1, h2, h3 { color: #38bdf8; }
         .hidden { display: none !important; }
         .form-group { margin-bottom: 12px; }
@@ -559,18 +559,20 @@ app.get('/admin.html', (req, res) => {
         .btn-sms { background: #0ea5e9; color: white; padding: 8px; border-radius: 6px; text-align: center; text-decoration: none; flex: 1; font-weight: bold; font-size: 12px; }
         .btn-edit { background: #eab308; color: #000; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; font-size: 12px; }
         .btn-delete { background: #dc2626; color: #fff; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; font-size: 12px; }
-        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 13px; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+        
+        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 13px; background: #1e293b; padding: 12px 16px; border-radius: 10px; border: 1px solid #334155; }
+        
+        /* Hlavní lišta záložek */
+        .tabs-bar { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 20px; padding-bottom: 4px; }
+        .tab-btn { background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 10px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; white-space: nowrap; transition: all 0.2s; }
+        .tab-btn:hover { background: #334155; color: #fff; }
+        .tab-btn.active { background: #2563eb; color: #fff; border-color: #3b82f6; }
+
         .error-msg { color: #f87171; font-size: 14px; margin-top: 5px; }
         .calendar-box { background: #0f172a; padding: 10px; border-radius: 6px; border: 1px solid #334155; font-family: monospace; font-size: 13px; color: #38bdf8; word-break: break-all; margin-top: 5px; user-select: all; }
         
-        /* Styly pro hamburger menu v levém horním rohu */
-        .menu-dropdown { position: relative; display: inline-block; }
-        .menu-btn { background: #334155; color: white; padding: 8px 12px; border-radius: 6px; font-size: 14px; border: none; cursor: pointer; font-weight: bold; }
-        .menu-content { display: none; position: absolute; left: 0; top: 100%; background: #1e293b; min-width: 260px; box-shadow: 0px 8px 16px rgba(0,0,0,0.5); border: 1px solid #475569; border-radius: 6px; z-index: 10; margin-top: 5px; padding: 8px; }
-        .menu-content.show { display: block; }
-        .menu-section { background: #0f172a; margin-bottom: 8px; border-radius: 6px; border: 1px solid #334155; overflow: hidden; }
+        .section-box { background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid #334155; margin-bottom: 20px; }
         
-        /* Styly pro vizuální grafy */
         .progress-bar-container { background: #334155; border-radius: 4px; overflow: hidden; height: 12px; margin: 8px 0; display: flex; }
         .progress-fill-profit { background: #16a34a; height: 100%; }
         .progress-fill-cost { background: #dc2626; height: 100%; }
@@ -580,7 +582,7 @@ app.get('/admin.html', (req, res) => {
 
 <div class="container">
     <!-- PŘIHLÁŠENÍ MECHANIKA -->
-    <div id="loginView">
+    <div id="loginView" class="section-box">
         <h1 style="text-align: center;">PofelGarage - Mechanici</h1>
         <p style="text-align: center; font-size: 13px; color: #94a3b8;">Zadejte své přihlašovací údaje (např. <b>StSi</b>)</p>
         <form id="login-form">
@@ -601,138 +603,139 @@ app.get('/admin.html', (req, res) => {
     <!-- ADMINISTRACE (Po přihlášení) -->
     <div id="mechanicView" class="hidden">
         <div class="top-nav">
-            <!-- HAMBURGER MENU V LEVÉM HORNÍM ROHU -->
-            <div class="menu-dropdown">
-                <button onclick="toggleMenu()" class="menu-btn">☰ Menu ▾</button>
-                <div id="appMenu" class="menu-content">
-                    
-                    <!-- Správa uživatelů (Pouze StSi) -->
-                    <div id="menuUserManagement" class="menu-section hidden" style="border-color: #38bdf8; padding: 10px;">
-                        <details>
-                            <summary style="font-size: 14px; font-weight: bold; color: #38bdf8; cursor: pointer;">👥 Správa uživatelů</summary>
-                            <div style="margin-top: 8px;">
-                                <form id="new-user-form">
-                                    <div class="form-group" style="margin-bottom:6px;">
-                                        <input type="text" id="new-username-input" placeholder="Jméno mechanika" required style="font-size:13px; padding:6px;">
-                                    </div>
-                                    <div class="form-group" style="margin-bottom:6px;">
-                                        <input type="password" id="new-password-input" placeholder="Heslo" required style="font-size:13px; padding:6px;">
-                                    </div>
-                                    <button type="submit" class="btn" style="background: #2563eb; font-size:13px; padding:8px;">Vytvořit</button>
-                                </form>
-                                <div id="users-list-admin" style="margin-top: 8px; font-size: 12px;">Načítám...</div>
-                            </div>
-                        </details>
+            <span>Mechanik: <strong id="loggedUserDisplay"></strong></span>
+            <a href="#" onclick="logout()" style="color: #f87171; font-weight: bold; text-decoration: none;">Odhlásit</a>
+        </div>
+
+        <!-- HLAVNÍ NAVIGAČNÍ ZÁLOŽKY -->
+        <div class="tabs-bar" id="mainTabsBar">
+            <button class="tab-btn active" onclick="switchTab('zakazky', this)">🚗 Zakázky</button>
+            <button class="tab-btn" onclick="switchTab('finance', this)">📊 Finance</button>
+            <button class="tab-btn" onclick="switchTab('archiv', this)">📂 Archiv</button>
+            <button class="tab-btn admin-only hidden" onclick="switchTab('uzivatele', this)">👥 Uživatelé</button>
+            <button class="tab-btn admin-only hidden" onclick="switchTab('nfc', this)">📱 NFC & Docházka</button>
+        </div>
+
+        <!-- 1. SEKCE: SPRÁVA ZAKÁZEK -->
+        <div id="tab-zakazky" class="section-box">
+            <h1>Správa zakázek</h1>
+            <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;">
+                <h3 id="formTitle" style="margin-top:0; font-size:15px;">Přidat vozidlo / Upravit</h3>
+                <form id="vehicleForm" onsubmit="saveVehicle(event)">
+                    <div class="form-group">
+                        <label>SPZ:</label>
+                        <input type="text" id="spz" required style="text-transform: uppercase;">
+                    </div>
+                    <div class="form-group">
+                        <label>Model vozidla:</label>
+                        <input type="text" id="model" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Telefon na zákazníka (povinné):</label>
+                        <input type="tel" id="phone" required placeholder="+420 123 456 789">
+                    </div>
+                    <div class="form-group">
+                        <label>Přiřadit mechanikovi:</label>
+                        <select id="assignedMechanic" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Stav opravy:</label>
+                        <select id="status" required onchange="toggleFinanceFields()">
+                            <option value="Přijato do servisu">Přijato do servisu</option>
+                            <option value="Probíhá oprava">Probíhá oprava</option>
+                            <option value="Čeká se na díly">Čeká se na díly</option>
+                            <option value="Opraveno - připraveno k vyzvednutí">Opraveno - připraveno k vyzvednutí (Dokončit)</option>
+                            <option value="Vozidlo se nenachází v servise">Vozidlo se nenachází v servise</option>
+                        </select>
                     </div>
 
-                    <!-- NFC a docházka (Pouze StSi) -->
-                    <div id="menuNfcManagement" class="menu-section hidden" style="border-color: #16a34a; padding: 10px;">
-                        <details>
-                            <summary style="font-size: 14px; font-weight: bold; color: #16a34a; cursor: pointer;">📱 NFC & Docházka</summary>
-                            <div style="margin-top: 8px; font-size: 12px;">
-                                <p style="color: #94a3b8; margin: 0 0 5px 0;">Kalendář:</p>
-                                <div id="calendar-link-box" class="calendar-box" style="font-size: 11px; padding: 6px;">Načítám...</div>
-                                <form id="new-device-form" style="margin-top: 8px;">
-                                    <div class="form-group" style="margin-bottom:6px;">
-                                        <input type="text" id="device-token-input" placeholder="Token dev_..." required style="font-size:13px; padding:6px;">
-                                    </div>
-                                    <div class="form-group" style="margin-bottom:6px;">
-                                        <input type="text" id="device-username" placeholder="Jméno / Umístění" required style="font-size:13px; padding:6px;">
-                                    </div>
-                                    <button type="submit" class="btn" style="background: #16a34a; font-size:13px; padding:8px;">Schválit NFC</button>
-                                </form>
-                                <div style="margin-top: 8px; font-weight: bold; color: #38bdf8;">Živá docházka (1s):</div>
-                                <div id="attendance-latest-list" style="margin-top: 3px;">Načítám...</div>
-                                <div style="margin-top: 8px; font-weight: bold;">Schválená zařízení:</div>
-                                <div id="nfc-devices-list" style="margin-top: 3px;">Načítání...</div>
-                            </div>
-                        </details>
+                    <div id="financeFields" class="hidden" style="background: #1e293b; padding: 12px; border-radius: 6px; border: 1px solid #16a34a; margin-bottom: 12px;">
+                        <h4 style="margin: 0 0 10px 0; color: #16a34a; font-size: 14px;">💰 Finanční uzávěrka zakázky</h4>
+                        <div class="form-group">
+                            <label>Popis provedené práce:</label>
+                            <textarea id="workDone" rows="2" placeholder="Např. výměna brzdových destiček, olej..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Náklady (materiál / díly) v Kč:</label>
+                            <input type="number" step="0.01" id="costExpenses" placeholder="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Konečná částka placená zákazníkem v Kč:</label>
+                            <input type="number" step="0.01" id="finalPrice" placeholder="0">
+                        </div>
                     </div>
 
-                    <!-- Výkon a finance mechaniků -->
-                    <div class="menu-section" style="padding: 10px;">
-                        <details>
-                            <summary style="font-size: 14px; font-weight: bold; color: #38bdf8; cursor: pointer;">📊 Výkon a finance</summary>
-                            <div id="mechanicsStatsContainer" style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;"></div>
-                        </details>
+                    <div class="form-group">
+                        <label>Poznámka:</label>
+                        <textarea id="note" rows="2"></textarea>
                     </div>
-
-                    <!-- Trvalý archiv zakázek -->
-                    <div class="menu-section" style="padding: 10px;">
-                        <details>
-                            <summary style="font-size: 14px; font-weight: bold; color: #16a34a; cursor: pointer;">📂 Archiv zakázek</summary>
-                            <div style="margin-top: 8px;">
-                                <input type="text" id="archiveSearch" placeholder="🔍 Hledat SPZ v archivu..." oninput="renderCompletedArchive()" style="font-size:12px; padding:6px; text-transform: uppercase; margin-bottom: 6px;">
-                                <div id="completedArchiveList" style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;"></div>
-                            </div>
-                        </details>
-                    </div>
-
-                </div>
+                    <button type="submit" class="btn">Uložit do karet / Dokončit</button>
+                </form>
             </div>
 
-            <div>Mechanik: <strong id="loggedUserDisplay"></strong> | <a href="#" onclick="logout()" style="color: #f87171; font-weight: bold; text-decoration: none;">Odhlásit</a></div>
+            <h3>Seznam aktivních vozidel v servisu</h3>
+            <div id="mechanicCardList" class="card-list"></div>
         </div>
 
-        <h1>Správa zakázek</h1>
+        <!-- 2. SEKCE: VÝKON A FINANCE -->
+        <div id="tab-finance" class="section-box hidden">
+            <h2 style="color: #38bdf8; margin-top: 0;">📊 Výkon a finance mechaniků</h2>
+            <div id="mechanicsStatsContainer" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;"></div>
+        </div>
 
-        <!-- POUZE SPRÁVA ZAKÁZEK NA HLAVNÍ STRÁNCE -->
-        <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;">
-            <h3 id="formTitle" style="margin-top:0; font-size:15px;">Přidat vozidlo / Upravit</h3>
-            <form id="vehicleForm" onsubmit="saveVehicle(event)">
-                <div class="form-group">
-                    <label>SPZ:</label>
-                    <input type="text" id="spz" required style="text-transform: uppercase;">
-                </div>
-                <div class="form-group">
-                    <label>Model vozidla:</label>
-                    <input type="text" id="model" required>
-                </div>
-                <div class="form-group">
-                    <label>Telefon na zákazníka (povinné):</label>
-                    <input type="tel" id="phone" required placeholder="+420 123 456 789">
-                </div>
-                <div class="form-group">
-                    <label>Přiřadit mechanikovi:</label>
-                    <select id="assignedMechanic" required></select>
-                </div>
-                <div class="form-group">
-                    <label>Stav opravy:</label>
-                    <select id="status" required onchange="toggleFinanceFields()">
-                        <option value="Přijato do servisu">Přijato do servisu</option>
-                        <option value="Probíhá oprava">Probíhá oprava</option>
-                        <option value="Čeká se na díly">Čeká se na díly</option>
-                        <option value="Opraveno - připraveno k vyzvednutí">Opraveno - připraveno k vyzvednutí (Dokončit)</option>
-                        <option value="Vozidlo se nenachází v servise">Vozidlo se nenachází v servise</option>
-                    </select>
-                </div>
+        <!-- 3. SEKCE: ARCHIV ZAKÁZEK -->
+        <div id="tab-archiv" class="section-box hidden" style="border-color: #16a34a;">
+            <h2 style="color: #16a34a; margin-top: 0;">📂 Trvalý archiv dokončených zakázek</h2>
+            <div class="form-group" style="margin-top: 10px;">
+                <input type="text" id="archiveSearch" placeholder="🔍 Vyhledat v archivu dle SPZ..." oninput="renderCompletedArchive()" style="text-transform: uppercase;">
+            </div>
+            <div id="completedArchiveList" class="card-list" style="max-height: 500px; overflow-y: auto;"></div>
+        </div>
 
-                <div id="financeFields" class="hidden" style="background: #1e293b; padding: 12px; border-radius: 6px; border: 1px solid #16a34a; margin-bottom: 12px;">
-                    <h4 style="margin: 0 0 10px 0; color: #16a34a; font-size: 14px;">💰 Finanční uzávěrka zakázky</h4>
-                    <div class="form-group">
-                        <label>Popis provedené práce:</label>
-                        <textarea id="workDone" rows="2" placeholder="Např. výměna brzdových destiček, olej..."></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>Náklady (materiál / díly) v Kč:</label>
-                        <input type="number" step="0.01" id="costExpenses" placeholder="0">
-                    </div>
-                    <div class="form-group">
-                        <label>Konečná částka placená zákazníkem v Kč:</label>
-                        <input type="number" step="0.01" id="finalPrice" placeholder="0">
-                    </div>
-                </div>
-
+        <!-- 4. SEKCE: SPRÁVA UŽIVATELŮ (Pouze StSi) -->
+        <div id="tab-uzivatele" class="section-box hidden" style="border-color: #38bdf8;">
+            <h2 style="color: #38bdf8; margin-top: 0;">👥 Správa uživatelů</h2>
+            <form id="new-user-form" style="margin-top: 10px;">
                 <div class="form-group">
-                    <label>Poznámka:</label>
-                    <textarea id="note" rows="2"></textarea>
+                    <label>Uživatelské jméno:</label>
+                    <input type="text" id="new-username-input" placeholder="např. Frantisek" required autocomplete="off">
                 </div>
-                <button type="submit" class="btn">Uložit do karet / Dokončit</button>
+                <div class="form-group">
+                    <label>Heslo:</label>
+                    <input type="password" id="new-password-input" placeholder="Zadejte heslo" required autocomplete="off">
+                </div>
+                <button type="submit" class="btn" style="background: #2563eb;">Vytvořit uživatele</button>
             </form>
+            <h3 style="color: #f8fafc; font-size: 14px; margin-top: 20px;">Seznam registrovaných uživatelů:</h3>
+            <div id="users-list-admin" style="margin-top: 5px;">Načítání uživatelů...</div>
         </div>
 
-        <h3>Seznam aktivních vozidel v servisu</h3>
-        <div id="mechanicCardList" class="card-list"></div>
+        <!-- 5. SEKCE: NFC & DOCHÁZKA (Pouze StSi) -->
+        <div id="tab-nfc" class="section-box hidden" style="border-color: #16a34a;">
+            <h2 style="color: #16a34a; margin-top: 0;">📱 NFC & Docházka</h2>
+            <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📅 Odkaz na kalendář docházky</h3>
+            <div id="calendar-link-box" class="calendar-box">Načítám odkaz...</div>
+
+            <h3 style="margin-top:20px; font-size:15px; color: #16a34a;">📱 Schválení nového NFC zařízení</h3>
+            <form id="new-device-form" style="margin-top: 10px;">
+                <div class="form-group">
+                    <label>Token zařízení:</label>
+                    <input type="text" id="device-token-input" placeholder="např. dev_..." required autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Jméno uživatele / Umístění:</label>
+                    <input type="text" id="device-username" placeholder="např. Pavel" required autocomplete="off">
+                </div>
+                <button type="submit" class="btn" style="background: #16a34a;">Schválit a přidat zařízení</button>
+            </form>
+
+            <h3 style="color: #f8fafc; font-size: 14px; margin-top: 20px;">Poslední stavy uživatelů (Živě 1s):</h3>
+            <div id="attendance-latest-list" style="margin-top: 5px; font-size: 13px; color: #cbd5e1;">Načítám docházku...</div>
+
+            <h3 style="color: #f8fafc; font-size: 14px; margin-top: 20px;">Seznam schválených zařízení:</h3>
+            <div id="nfc-devices-list" style="margin-top: 5px;">Načítání zařízení...</div>
+        </div>
+
     </div>
 </div>
 
@@ -745,7 +748,6 @@ app.get('/admin.html', (req, res) => {
 
     document.getElementById('calendar-link-box').innerText = window.location.origin + '/calendar.ics';
 
-    // Automatické přihlášení, pokud je uživatel uložený v paměti prohlížeče
     window.addEventListener('DOMContentLoaded', () => {
         if (currentUser) {
             setupActiveSession(currentUser);
@@ -758,9 +760,9 @@ app.get('/admin.html', (req, res) => {
         document.getElementById('loginView').classList.add('hidden');
         document.getElementById('mechanicView').classList.remove('hidden');
 
+        const adminElements = document.querySelectorAll('.admin-only');
         if (currentUser.toLowerCase() === 'stsi') {
-            document.getElementById('menuNfcManagement').classList.remove('hidden');
-            document.getElementById('menuUserManagement').classList.remove('hidden');
+            adminElements.forEach(el => el.classList.remove('hidden'));
             loadNfcDevices();
             loadAttendanceSummary();
             loadAdminUsersList();
@@ -768,28 +770,31 @@ app.get('/admin.html', (req, res) => {
             if (attendanceInterval) clearInterval(attendanceInterval);
             attendanceInterval = setInterval(loadAttendanceSummary, 1000);
         } else {
-            document.getElementById('menuNfcManagement').classList.add('hidden');
-            document.getElementById('menuUserManagement').classList.add('hidden');
+            adminElements.forEach(el => el.classList.add('hidden'));
             if (attendanceInterval) clearInterval(attendanceInterval);
         }
 
         loadUsersAndData();
     }
 
-    function toggleMenu() {
-        document.getElementById('appMenu').classList.toggle('show');
-    }
+    function switchTab(tabId, btnElement) {
+        // Skrýt všechny sekce
+        const sections = ['zakazky', 'finance', 'archiv', 'uzivatele', 'nfc'];
+        sections.forEach(sec => {
+            const el = document.getElementById('tab-' + sec);
+            if (el) el.classList.add('hidden');
+        });
 
-    window.onclick = function(event) {
-        if (!event.target.matches('.menu-btn') && !event.target.closest('.menu-content')) {
-            const dropdowns = document.getElementsByClassName("menu-content");
-            for (let i = 0; i < dropdowns.length; i++) {
-                const openDropdown = dropdowns[i];
-                if (openDropdown.classList.contains('show')) {
-                    openDropdown.classList.remove('show');
-                }
-            }
-        }
+        // Zobrazit vybranou
+        const target = document.getElementById('tab-' + tabId);
+        if (target) target.classList.remove('hidden');
+
+        // Odstranit aktivní třídu ze všech tlačítek a přidat na aktuální
+        const buttons = document.querySelectorAll('.tab-btn');
+        buttons.forEach(b => b.classList.remove('active'));
+        if (btnElement) btnElement.classList.add('active');
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function toggleFinanceFields() {
@@ -828,7 +833,7 @@ app.get('/admin.html', (req, res) => {
             }
 
             currentUser = data.username;
-            localStorage.setItem('pofelGarageUser', currentUser); // Uložení do prohlížeče
+            localStorage.setItem('pofelGarageUser', currentUser);
             setupActiveSession(currentUser);
 
         } catch (err) {
@@ -838,7 +843,7 @@ app.get('/admin.html', (req, res) => {
 
     function logout() {
         if (attendanceInterval) clearInterval(attendanceInterval);
-        localStorage.removeItem('pofelGarageUser'); // Vymazání z paměti při odhlášení
+        localStorage.removeItem('pofelGarageUser');
         location.reload();
     }
 
@@ -976,36 +981,44 @@ app.get('/admin.html', (req, res) => {
 
             let jobsHtml = '';
             if (mechJobs.length === 0) {
-                jobsHtml = '<p style="color: #94a3b8; font-size: 12px;">Žádné dokončené zakázky.</p>';
+                jobsHtml = '<p style="color: #94a3b8; font-size: 13px;">Žádné dokončené zakázky.</p>';
             } else {
                 jobsHtml = mechJobs.map(j => \`
-                    <div style="background: #1e293b; padding: 6px; margin-bottom: 4px; border-radius: 4px; border: 1px solid #334155; font-size: 12px;">
-                        <div><strong>\${j.spz}</strong> - <span style="color: #16a34a;">Zisk: \${j.net_profit} Kč</span></div>
-                        <div style="color: #94a3b8;">Práce: \${j.work_done} | Náklady: \${j.cost_expenses} Kč | Cena: \${j.final_price} Kč</div>
+                    <div style="background: #0f172a; padding: 8px; margin-bottom: 6px; border-radius: 6px; border: 1px solid #334155; font-size: 13px;">
+                        <div><strong>\${j.spz}</strong> (\${j.model}) - <span style="color: #16a34a;">Zisk: \${j.net_profit} Kč</span></div>
+                        <div style="color: #94a3b8; font-size: 12px;">Práce: \${j.work_done} | Náklady: \${j.cost_expenses} Kč | Cena: \${j.final_price} Kč</div>
                     </div>
                 \`).join('');
             }
 
             statsContainer.innerHTML += \`
-                <details style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px; cursor: pointer;">
-                    <summary style="font-weight: bold; color: #38bdf8; outline: none; display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
-                        <span>👤 \${mechName}</span>
-                        <span style="color: #16a34a;">Zisk: \${totalProfit} Kč</span>
+                <details style="background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; cursor: pointer;">
+                    <summary style="font-weight: bold; color: #38bdf8; outline: none; display: flex; justify-content: space-between; align-items: center;">
+                        <span>👤 Mechanik: \${mechName}</span>
+                        <span style="font-size: 13px; color: #16a34a;">Celkový zisk: \${totalProfit} Kč</span>
                     </summary>
-                    <div style="margin-top: 8px; cursor: default; border-top: 1px solid #334155; pt: 8px;" onclick="event.stopPropagation()">
-                        <div style="font-size: 12px; margin-bottom: 6px; color: #cbd5e1;">
-                            <div>📦 Dokončeno: <strong>\${mechJobs.length}</strong> | 🚗 Aktivních: <strong>\${mechActive.length}</strong></div>
-                            <div>💸 Náklady: <strong style="color: #f87171;">\${totalExpenses} Kč</strong> | 💵 Tržby: <strong style="color: #38bdf8;">\${totalRevenue} Kč</strong></div>
+                    <div style="margin-top: 12px; cursor: default; border-top: 1px solid #334155; pt: 10px;" onclick="event.stopPropagation()">
+                        <div style="display: flex; gap: 15px; font-size: 13px; margin-bottom: 10px; color: #cbd5e1;">
+                            <div>📦 Dokončeno zakázek: <strong>\${mechJobs.length}</strong></div>
+                            <div>🚗 Aktivních v servisu: <strong>\${mechActive.length}</strong></div>
                         </div>
+                        <div style="font-size: 13px; margin-bottom: 8px;">
+                            <div>💸 Celkové náklady: <strong style="color: #f87171;">\${totalExpenses} Kč</strong></div>
+                            <div>💵 Celkové tržby: <strong style="color: #38bdf8;">\${totalRevenue} Kč</strong></div>
+                        </div>
+
+                        <div style="font-size: 12px; color: #94a3b8; margin-top: 6px;">Vizuální poměr (Náklady vs Čistý zisk z tržeb):</div>
                         <div class="progress-bar-container">
-                            <div class="progress-fill-profit" style="width: \${profitPercent}%;"></div>
-                            <div class="progress-fill-cost" style="width: \${costPercent}%;"></div>
+                            <div class="progress-fill-profit" style="width: \${profitPercent}%;" title="Čistý zisk \${profitPercent.toFixed(1)}%"></div>
+                            <div class="progress-fill-cost" style="width: \${costPercent}%;" title="Náklady \${costPercent.toFixed(1)}%"></div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; margin-bottom: 12px;">
                             <span style="color: #16a34a;">■ Zisk (\${totalProfit} Kč)</span>
                             <span style="color: #dc2626;">■ Náklady (\${totalExpenses} Kč)</span>
                         </div>
-                        <div style="max-height: 150px; overflow-y: auto;">\${jobsHtml}</div>
+
+                        <h4 style="margin: 10px 0 5px 0; font-size: 13px; color: #38bdf8;">Seznam dokončených zakázek:</h4>
+                        <div>\${jobsHtml}</div>
                     </div>
                 </details>
             \`;
@@ -1020,7 +1033,7 @@ app.get('/admin.html', (req, res) => {
         const filteredJobs = completedJobs.filter(job => job.spz.toUpperCase().includes(filterVal));
 
         if (filteredJobs.length === 0) {
-            container.innerHTML = '<p style="text-align:center; color:#94a3b8; font-size:12px;">Žádné zakázky.</p>';
+            container.innerHTML = '<p style="text-align:center; color:#94a3b8;">Žádné odpovídající zakázky v archivu.</p>';
             return;
         }
 
@@ -1031,17 +1044,22 @@ app.get('/admin.html', (req, res) => {
             const safeMech = (job.completed_by || '').replace(/'/g, "\\\\'");
 
             container.innerHTML += \`
-                <div class="car-card" style="border-color: #16a34a; padding: 10px; font-size: 12px;">
-                    <div class="car-header" style="font-size: 13px;">
+                <div class="car-card" style="border-color: #16a34a;">
+                    <div class="car-header">
                         <span>\${job.spz} (\${job.model})</span>
-                        <span style="color: #16a34a;">Zisk: \${job.net_profit} Kč</span>
+                        <span style="font-size: 12px; color: #16a34a; font-weight: bold;">Zisk: \${job.net_profit} Kč</span>
                     </div>
-                    <div class="car-row"><strong>Práce:</strong> \${job.work_done}</div>
-                    <div class="car-row"><strong>Náklady:</strong> \${job.cost_expenses} Kč | <strong>Cena:</strong> \${job.final_price} Kč</div>
-                    <div class="car-row"><strong>Mechanik:</strong> <span style="color: #38bdf8;">\${job.completed_by}</span></div>
-                    <div class="card-actions-row" style="margin-top: 6px;">
-                        <button class="btn-edit" onclick="editCompletedJob(\${job.id}, '\${safeWorkDone}', \${job.cost_expenses}, \${job.final_price}, '\${safeMech}')" style="padding:4px 8px; font-size:11px;">Upravit</button>
-                        <button class="btn-delete" onclick="deleteCompletedJob(\${job.id})" style="padding:4px 8px; font-size:11px;">Smazat</button>
+                    <div class="car-row"><strong>Provedená práce:</strong> \${job.work_done}</div>
+                    <div class="car-row"><strong>Náklady:</strong> \${job.cost_expenses} Kč | <strong>Cena pro zákazníka:</strong> \${job.final_price} Kč</div>
+                    <div class="car-row"><strong>Mechanik:</strong> <span style="color: #38bdf8; font-weight: bold;">\${job.completed_by}</span></div>
+                    <div class="car-row"><strong>Telefon:</strong> <a href="tel:\${job.phone}" style="color: #38bdf8;">\${job.phone}</a></div>
+                    <div class="car-row" style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Uzavřel: \${job.completed_by} | Datum: \${job.completed_at}</div>
+
+                    <div class="card-actions-row" style="margin-top: 10px;">
+                        <a href="tel:\${job.phone}" class="btn-call">📞 Zavolat</a>
+                        <a href="sms:\${job.phone}?body=\${smsText}" class="btn-sms">💬 SMS</a>
+                        <button class="btn-edit" onclick="editCompletedJob(\${job.id}, '\${safeWorkDone}', \${job.cost_expenses}, \${job.final_price}, '\${safeMech}')">Upravit</button>
+                        <button class="btn-delete" onclick="deleteCompletedJob(\${job.id})">Smazat</button>
                     </div>
                 </div>
             \`;
@@ -1049,13 +1067,13 @@ app.get('/admin.html', (req, res) => {
     }
 
     function editCompletedJob(id, currentWork, currentCost, currentPrice, currentMech) {
-        const newWork = prompt('Upravit práci:', currentWork);
+        const newWork = prompt('Upravit provedenou práci:', currentWork);
         if (newWork === null) return;
         const newCost = prompt('Upravit náklady (Kč):', currentCost);
         if (newCost === null) return;
-        const newPrice = prompt('Upravit cenu pro zákazníka (Kč):', currentPrice);
+        const newPrice = prompt('Upravit konečnou cenu pro zákazníka (Kč):', currentPrice);
         if (newPrice === null) return;
-        const newMech = prompt('Upravit mechanika:', currentMech);
+        const newMech = prompt('Upravit jméno mechanika:', currentMech);
         if (newMech === null) return;
 
         fetch('/api/completed-jobs/' + id, {
@@ -1070,15 +1088,19 @@ app.get('/admin.html', (req, res) => {
         })
         .then(res => res.json())
         .then(res => {
-            if (res.error) { alert(res.error); return; }
-            alert('Aktualizováno! Nový zisk: ' + res.netProfit + ' Kč');
+            if (res.error) {
+                alert(res.error);
+                return;
+            }
+            alert('Zakázka v archivu upravena! Nový čistý zisk: ' + res.netProfit + ' Kč');
             loadUsersAndData();
         });
     }
 
     function deleteCompletedJob(id) {
-        if (!confirm('Opravdu smazat z archivu?')) return;
+        if (!confirm('Opravdu chcete smazat tuto zakázku z trvalého archivu?')) return;
         fetch('/api/completed-jobs/' + id, { method: 'DELETE' })
+            .then(res => res.json())
             .then(() => loadUsersAndData());
     }
 
@@ -1090,11 +1112,12 @@ app.get('/admin.html', (req, res) => {
         document.getElementById('phone').value = phone;
         document.getElementById('assignedMechanic').value = mechanic;
         toggleFinanceFields();
+        switchTab('zakazky', document.querySelector('.tab-btn'));
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function deleteCar(id) {
-        if (!confirm('Opravdu smazat aktivní vozidlo?')) return;
+        if (!confirm('Opravdu smazat aktivní vozidlo ze servisu?')) return;
         fetch('/api/vehicles/' + id, { method: 'DELETE' }).then(() => loadUsersAndData());
     }
 
@@ -1104,9 +1127,19 @@ app.get('/admin.html', (req, res) => {
             const list = await res.json();
             const el = document.getElementById('attendance-latest-list');
             if (!el) return;
-            if (list.length === 0) { el.innerHTML = 'Žádné záznamy.'; return; }
-            el.innerHTML = list.map(item => \`<div>👤 <strong>\${item.username}</strong>: <span style="color:\${item.type==='Příchod'?'#16a34a':'#ca8a04'}">\${item.type}</span> v \${item.time}</div>\`).join('');
-        } catch (e) {}
+            if (list.length === 0) {
+                el.innerHTML = '<span style="color: #94a3b8;">Zatím žádné záznamy docházky.</span>';
+                return;
+            }
+            el.innerHTML = list.map(item => \`
+                <div style="background: #1e293b; padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; border: 1px solid #334155; display: flex; justify-content: space-between;">
+                    <span>👤 <strong>\${item.username}</strong></span>
+                    <span><strong style="color: \${item.type === 'Příchod' ? '#16a34a' : '#ca8a04'};">\${item.type}</strong> v \${item.time} (\${item.date})</span>
+                </div>
+            \`).join('');
+        } catch (err) {
+            console.error('Chyba při načítání docházky');
+        }
     }
 
     async function loadNfcDevices() {
@@ -1114,9 +1147,22 @@ app.get('/admin.html', (req, res) => {
             const res = await fetch('/api/attendance/devices');
             const devices = await res.json();
             const listEl = document.getElementById('nfc-devices-list');
-            if (devices.length === 0) { listEl.innerHTML = 'Žádná zařízení.'; return; }
-            listEl.innerHTML = devices.map(d => \`<div>📱 \${d.username} <button onclick="deleteNfcDevice('\${d.device_token}')" style="background:#dc2626; color:white; border:none; padding:2px 6px; font-size:10px; border-radius:3px;">X</button></div>\`).join('');
-        } catch (e) {}
+            if (devices.length === 0) {
+                listEl.innerHTML = '<p style="color: #94a3b8; font-size: 13px;">Žádná schválená zařízení.</p>';
+                return;
+            }
+            listEl.innerHTML = devices.map(d => \`
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; border: 1px solid #334155;">
+                    <div>
+                        <span>📱 <strong>\${d.username}</strong></span><br>
+                        <span style="font-size: 11px; color: #94a3b8; word-break: break-all;">Token: \${d.device_token}</span>
+                    </div>
+                    <button onclick="deleteNfcDevice('\${d.device_token}')" style="background: #dc2626; color: white; border: none; padding: 6px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px;">Odebrat</button>
+                </div>
+            \`).join('');
+        } catch (err) {
+            console.error('Chyba při načítání zařízení');
+        }
     }
 
     const newDeviceForm = document.getElementById('new-device-form');
@@ -1125,19 +1171,32 @@ app.get('/admin.html', (req, res) => {
             e.preventDefault();
             const deviceToken = document.getElementById('device-token-input').value.trim();
             const username = document.getElementById('device-username').value.trim();
+            
             const res = await fetch('/api/attendance/register-device', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ deviceToken, username })
             });
-            if (res.ok) { document.getElementById('new-device-form').reset(); loadNfcDevices(); alert('NFC schváleno!'); }
+            
+            if (res.ok) {
+                document.getElementById('new-device-form').reset();
+                loadNfcDevices();
+                alert('Zařízení bylo úspěšně autorizováno!');
+            } else {
+                const err = await res.json();
+                alert('Chyba: ' + (err.error || 'Neznámá chyba'));
+            }
         });
     }
 
     async function deleteNfcDevice(token) {
-        if (!confirm('Odebrat NFC?')) return;
-        await fetch('/api/attendance/devices/' + encodeURIComponent(token), { method: 'DELETE' });
-        loadNfcDevices();
+        if (!confirm('Opravdu chcete odebrat přístup tomuto zařízení?')) return;
+        const res = await fetch('/api/attendance/devices/' + encodeURIComponent(token), { method: 'DELETE' });
+        if (res.ok) {
+            loadNfcDevices();
+        } else {
+            alert('Chyba při mazání zařízení.');
+        }
     }
 
     async function loadAdminUsersList() {
@@ -1146,13 +1205,19 @@ app.get('/admin.html', (req, res) => {
             const users = await res.json();
             const listEl = document.getElementById('users-list-admin');
             if (!listEl) return;
+            if (users.length === 0) {
+                listEl.innerHTML = '<p style="color: #94a3b8; font-size: 13px;">Žádní uživatelé.</p>';
+                return;
+            }
             listEl.innerHTML = users.map(u => \`
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <span>👤 \${u.username}</span>
-                    \${u.username.toLowerCase() !== 'stsi' ? \`<button onclick="deleteUser(\${u.id})" style="background: #dc2626; color: white; border: none; padding: 2px 6px; border-radius: 3px; font-size: 10px;">X</button>\` : ''}
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #0f172a; padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; border: 1px solid #334155;">
+                    <span>👤 <strong>\${u.username}</strong></span>
+                    \${u.username.toLowerCase() !== 'stsi' ? \`<button onclick="deleteUser(\${u.id})" style="background: #dc2626; color: white; border: none; padding: 6px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px;">Smazat</button>\` : '<span style="font-size: 11px; color: #94a3b8;">Hlavní admin</span>'}
                 </div>
             \`).join('');
-        } catch (e) {}
+        } catch (err) {
+            console.error('Chyba při načítání uživatelů');
+        }
     }
 
     const newUserForm = document.getElementById('new-user-form');
@@ -1161,28 +1226,35 @@ app.get('/admin.html', (req, res) => {
             e.preventDefault();
             const username = document.getElementById('new-username-input').value.trim();
             const password = document.getElementById('new-password-input').value;
+
             const res = await fetch('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
             });
+
             if (res.ok) {
                 document.getElementById('new-user-form').reset();
                 loadAdminUsersList();
                 loadUsersAndData();
-                alert('Uživatel vytvořen!');
+                alert('Uživatel úspěšně vytvořen!');
             } else {
                 const err = await res.json();
-                alert('Chyba: ' + (err.error || 'Neznámá'));
+                alert('Chyba: ' + (err.error || 'Neznámá chyba'));
             }
         });
     }
 
     async function deleteUser(id) {
-        if (!confirm('Smazat uživatele?')) return;
-        await fetch('/api/users/' + id, { method: 'DELETE' });
-        loadAdminUsersList();
-        loadUsersAndData();
+        if (!confirm('Opravdu chcete smazat tohoto uživatele?')) return;
+        const res = await fetch('/api/users/' + id, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) {
+            loadAdminUsersList();
+            loadUsersAndData();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
     }
 </script>
 </body>
