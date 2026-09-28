@@ -7,7 +7,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>P&R MONT - Administrace mechaniků</title>
+    <title>PofelGarage - Administrace mechaniků</title>
     <style>
         * { box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 16px; color: #333; }
@@ -44,7 +44,7 @@
 <div class="container">
     <!-- PŘIHLÁŠENÍ MECHANIKA (Vynuceno 2+2) -->
     <div id="loginView">
-        <h1>P&R MONT - Mechanici</h1>
+        <h1>PofelGarage - Mechanici</h1>
         <p style="text-align: center; font-size: 13px; color: #666;">Zadejte své přihlašovací údaje ve formátu 2+2 (např. Petr Novák = <b>peno</b>)</p>
         <div class="form-group">
             <label>Přihlášení (2+2):</label>
@@ -98,11 +98,11 @@
             </form>
         </div>
 
-        <!-- SEKCE SPRÁVY NFC ZAŘÍZENÍ (Zobrazí se pouze pro stsi) -->
+        <!-- SEKCE SPRÁVY NFC ZAŘÍZENÍ A DOCHÁZKY (Zobrazí se pouze pro stsi) -->
         <div id="nfcManagementContainer" class="hidden" style="margin-bottom: 20px;">
             <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; border: 1px solid #16a34a;">
-                <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📱 Správa NFC zařízení (Docházka)</h3>
-                <p style="color: #666; font-size: 13px; margin-bottom: 10px;">Zde spárujte telefony umístěné u NFC tagů. Token zjistíte tak, že na novém telefonu otevřete adresu <code style="color:#0066cc;">/nfc</code>.</p>
+                <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📱 Správa NFC zařízení a Docházka</h3>
+                <p style="color: #666; font-size: 13px; margin-bottom: 10px;">Token zjistíte tak, že na novém telefonu otevřete adresu <code style="color:#0066cc;">/nfc</code>.</p>
                 
                 <form id="new-device-form">
                     <div class="form-group">
@@ -115,6 +115,9 @@
                     </div>
                     <button type="submit" class="btn" style="background: #16a34a;">Schválit a přidat zařízení</button>
                 </form>
+
+                <h3 style="color: #333; font-size: 14px; margin-top: 15px;">Poslední stavy uživatelů (Živě):</h3>
+                <div id="attendance-latest-list" style="margin-top: 5px; font-size: 13px;">Načítám docházku...</div>
 
                 <h3 style="color: #333; font-size: 14px; margin-top: 15px;">Seznam schválených zařízení:</h3>
                 <div id="nfc-devices-list" style="margin-top: 10px;">Načítání zařízení...</div>
@@ -143,7 +146,7 @@
                 document.body.innerHTML = `
                     <div style="text-align:center; margin-top:20vh; font-family:system-ui; color: #f8fafc; background: #0f172a; height: 100vh; padding: 20px;">
                         <h1 style="color:#ef4444; font-size: 32px;">⛔ Přístup odepřen</h1>
-                        <p style="color:#94a3b8; font-size: 18px;">Tohle zařízení není autorizované pro správu P&R MONT.</p>
+                        <p style="color:#94a3b8; font-size: 18px;">Tohle zařízení není autorizované pro správu PofelGarage.</p>
                     </div>
                 `;
             }
@@ -154,6 +157,7 @@
 
     let currentUser = '';
     let allVehicles = [];
+    let attendanceInterval = null;
 
     function processLogin() {
         const val = document.getElementById('loginInput').value.trim().toLowerCase();
@@ -164,16 +168,21 @@
         currentUser = val;
         document.getElementById('loggedUserDisplay').innerText = currentUser;
         
-        // OPRAVENO: Kontrola na malá písmena 'stsi' místo 'StSi'
         if (currentUser === 'stsi') {
             document.getElementById('adminUserManagementBtn').innerHTML = `
                 <a href="/manage-users" class="btn-manage-users">⚙️ Správa uživatelů</a>
             `;
             document.getElementById('nfcManagementContainer').classList.remove('hidden');
             loadNfcDevices();
+            loadAttendanceSummary();
+
+            // Spuštění automatického obnovování docházky každou 1 sekundu (Polling)
+            if (attendanceInterval) clearInterval(attendanceInterval);
+            attendanceInterval = setInterval(loadAttendanceSummary, 1000);
         } else {
             document.getElementById('adminUserManagementBtn').innerHTML = '';
             document.getElementById('nfcManagementContainer').classList.add('hidden');
+            if (attendanceInterval) clearInterval(attendanceInterval);
         }
 
         document.getElementById('loginView').classList.add('hidden');
@@ -182,6 +191,7 @@
     }
 
     function logout() {
+        if (attendanceInterval) clearInterval(attendanceInterval);
         location.reload();
     }
 
@@ -229,13 +239,13 @@
 
     function triggerAppNotification(spz, status) {
         if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("P&R MONT - Změna", {
+            new Notification("PofelGarage - Změna", {
                 body: `Vozidlo ${spz} - ${status}`
             });
         } else if ("Notification" in window && Notification.permission !== "denied") {
             Notification.requestPermission().then(permission => {
                 if (permission === "granted") {
-                    new Notification("P&R MONT - Změna", {
+                    new Notification("PofelGarage - Změna", {
                         body: `Vozidlo ${spz} - ${status}`
                     });
                 }
@@ -246,7 +256,7 @@
     function renderMechanicCards() {
         const container = document.getElementById('mechanicCardList');
         if (allVehicles.length === 0) {
-            container.innerHTML = '<p style="text-align:center; color:#888;">Žádná vozidla v databance.</p>';
+            container.innerHTML = '<p style="text-align:center; color:#888;">Žádná vozidla v databázi.</p>';
             return;
         }
 
@@ -292,7 +302,28 @@
         fetch('/api/vehicles/' + id, { method: 'DELETE' }).then(() => loadData());
     }
 
-    // --- SPRÁVA NFC ZAŘÍZENÍ ---
+    // --- SPRÁVA DOCHÁZKY A NFC ZAŘÍZENÍ ---
+    async function loadAttendanceSummary() {
+        try {
+            const res = await fetch('/api/attendance/latest');
+            const list = await res.json();
+            const el = document.getElementById('attendance-latest-list');
+            if (!el) return;
+            if (list.length === 0) {
+                el.innerHTML = '<span style="color: #666; font-size: 13px;">Zatím žádné záznamy docházky.</span>';
+                return;
+            }
+            el.innerHTML = list.map(item => `
+                <div style="background: #fff; padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; border: 1px solid #ddd; display: flex; justify-content: space-between;">
+                    <span>👤 <strong>${item.username}</strong></span>
+                    <span><strong style="color: ${item.type === 'Příchod' ? '#28a745' : '#ffc107'};">${item.type}</strong> v ${item.time} (${item.date})</span>
+                </div>
+            `).join('');
+        } catch (err) {
+            console.error('Chyba při načítání docházky');
+        }
+    }
+
     async function loadNfcDevices() {
         try {
             const res = await fetch('/api/attendance/devices');
