@@ -172,7 +172,6 @@ app.get('/sw.js', (req, res) => {
         self.addEventListener('fetch', (e) => { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); });
     `);
 });
-// --- ROZHRANÍ PRO NFC NA ZDI ( /nfc ) ---
 app.get('/nfc', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -189,20 +188,23 @@ app.get('/nfc', (req, res) => {
         button:hover { background: #15803d; }
         .hidden { display: none !important; }
         .badge { display: inline-block; padding: 8px 16px; border-radius: 8px; font-size: 20px; font-weight: bold; margin: 15px 0; background: #334155; }
+        .error { color: #f87171; font-size: 16px; line-height: 1.5; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="card">
             <h2>⏱️ PofelGarage Docházka</h2>
-            <div id="loading" style="color: #94a3b8;">Načítám zařízení...</div>
+            <div id="loading" style="color: #94a3b8; margin-top: 15px;">Načítám zařízení...</div>
             
-            <div id="register-section" class="hidden">
-                <p style="color: #cbd5e1; font-size: 14px;">Tento telefon ještě není spárovaný. Zadejte své jméno:</p>
-                <form id="reg-form">
-                    <input type="text" id="reg-username" placeholder="Vaše jméno (např. StSi, Pavel)" required autocomplete="off">
-                    <button type="submit">Uložit a zapsat příchod</button>
-                </form>
+            <div id="error-section" class="hidden">
+                <div class="error">
+                    ⛔ Přístup odepřen<br>
+                    <span style="font-size:13px; color:#94a3b8; font-weight:normal; display:block; margin-top:8px; word-break: break-all;">
+                        Tohle zařízení není v databázi autorizováno.<br>
+                        Váš token: <br><code style="color: #38bdf8; background: #0f172a; padding: 4px 8px; display: inline-block; margin-top: 4px; border-radius: 4px;" id="device-token-view"></code>
+                    </span>
+                </div>
             </div>
 
             <div id="result-section" class="hidden">
@@ -230,10 +232,13 @@ app.get('/nfc', (req, res) => {
                 });
                 const data = await res.json();
 
+                // Skryjeme načítání
                 document.getElementById('loading').classList.add('hidden');
 
+                // Pokud zařízení není registrováno, ukážeme chybovou hlášku a jeho token (žádná samoregistrace)
                 if (data.needsRegistration) {
-                    document.getElementById('register-section').classList.remove('hidden');
+                    document.getElementById('device-token-view').innerText = deviceToken;
+                    document.getElementById('error-section').classList.remove('hidden');
                     return;
                 }
 
@@ -245,36 +250,14 @@ app.get('/nfc', (req, res) => {
                     document.getElementById('res-time').innerText = data.time;
                     document.getElementById('result-section').classList.remove('hidden');
                 } else {
+                    document.getElementById('loading').classList.remove('hidden');
                     document.getElementById('loading').innerHTML = '<span style="color: #f87171;">Chyba: ' + (data.error || 'Neznámá chyba') + '</span>';
                 }
             } catch (err) {
+                document.getElementById('loading').classList.remove('hidden');
                 document.getElementById('loading').innerHTML = '<span style="color: #f87171;">Chyba připojení k serveru.</span>';
             }
         }
-
-        document.getElementById('reg-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = document.getElementById('reg-username').value.trim();
-            if (!username) return;
-
-            try {
-                const res = await fetch('/api/attendance/register-device', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ deviceToken, username, isAdmin: username === 'StSi' ? 1 : 0 })
-                });
-                if (res.ok) {
-                    document.getElementById('register-section').classList.add('hidden');
-                    document.getElementById('loading').classList.remove('hidden');
-                    document.getElementById('loading').innerText = 'Registrováno, zapisuji...';
-                    tapNfc();
-                } else {
-                    alert('Chyba registrace zařízení.');
-                }
-            } catch (err) {
-                alert('Chyba připojení.');
-            }
-        });
 
         tapNfc();
     </script>
