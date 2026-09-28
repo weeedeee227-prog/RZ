@@ -172,7 +172,115 @@ app.get('/sw.js', (req, res) => {
         self.addEventListener('fetch', (e) => { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); });
     `);
 });
+// --- ROZHRANÍ PRO NFC NA ZDI ( /nfc ) ---
+app.get('/nfc', (req, res) => {
+    res.send(`<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docházka - PofelGarage</title>
+    <style>
+        :root { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 0; }
+        .container { max-width: 400px; margin: 10vh auto; padding: 20px; text-align: center; }
+        .card { background: #1e293b; border-radius: 16px; padding: 30px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); border: 1px solid #334155; }
+        input, button { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 16px; }
+        button { background: #16a34a; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: #15803d; }
+        .hidden { display: none !important; }
+        .badge { display: inline-block; padding: 8px 16px; border-radius: 8px; font-size: 20px; font-weight: bold; margin: 15px 0; background: #334155; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h2>⏱️ PofelGarage Docházka</h2>
+            <div id="loading" style="color: #94a3b8;">Načítám zařízení...</div>
+            
+            <div id="register-section" class="hidden">
+                <p style="color: #cbd5e1; font-size: 14px;">Tento telefon ještě není spárovaný. Zadejte své jméno:</p>
+                <form id="reg-form">
+                    <input type="text" id="reg-username" placeholder="Vaše jméno (např. StSi, Pavel)" required autocomplete="off">
+                    <button type="submit">Uložit a zapsat příchod</button>
+                </form>
+            </div>
 
+            <div id="result-section" class="hidden">
+                <p style="color: #94a3b8; margin: 0;">Zaznamenáno pro:</p>
+                <h1 id="res-username" style="color: #38bdf8; margin: 10px 0;"></h1>
+                <div><span id="res-type" class="badge"></span></div>
+                <p style="color: #cbd5e1; font-size: 16px; margin-top: 15px;">Čas: <strong id="res-time"></strong></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let deviceToken = localStorage.getItem('deviceToken');
+        if (!deviceToken) {
+            deviceToken = 'dev_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+            localStorage.setItem('deviceToken', deviceToken);
+        }
+
+        async function tapNfc() {
+            try {
+                const res = await fetch('/api/attendance/nfc-tap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceToken })
+                });
+                const data = await res.json();
+
+                document.getElementById('loading').classList.add('hidden');
+
+                if (data.needsRegistration) {
+                    document.getElementById('register-section').classList.remove('hidden');
+                    return;
+                }
+
+                if (res.ok) {
+                    document.getElementById('res-username').innerText = data.username;
+                    const typeEl = document.getElementById('res-type');
+                    typeEl.innerText = data.type;
+                    typeEl.style.background = data.type === 'Příchod' ? '#16a34a' : '#ca8a04';
+                    document.getElementById('res-time').innerText = data.time;
+                    document.getElementById('result-section').classList.remove('hidden');
+                } else {
+                    document.getElementById('loading').innerHTML = '<span style="color: #f87171;">Chyba: ' + (data.error || 'Neznámá chyba') + '</span>';
+                }
+            } catch (err) {
+                document.getElementById('loading').innerHTML = '<span style="color: #f87171;">Chyba připojení k serveru.</span>';
+            }
+        }
+
+        document.getElementById('reg-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('reg-username').value.trim();
+            if (!username) return;
+
+            try {
+                const res = await fetch('/api/attendance/register-device', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceToken, username, isAdmin: username === 'StSi' ? 1 : 0 })
+                });
+                if (res.ok) {
+                    document.getElementById('register-section').classList.add('hidden');
+                    document.getElementById('loading').classList.remove('hidden');
+                    document.getElementById('loading').innerText = 'Registrováno, zapisuji...';
+                    tapNfc();
+                } else {
+                    alert('Chyba registrace zařízení.');
+                }
+            } catch (err) {
+                alert('Chyba připojení.');
+            }
+        });
+
+        tapNfc();
+    </script>
+</body>
+</html>`);
+});
 // --- FRONTEND: KLIENTSKÉ ROZHRANÍ ( / ) ---
 app.get('/', (req, res) => {
     res.send(`<!DOCTYPE html>
