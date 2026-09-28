@@ -131,7 +131,7 @@ app.get('/api/attendance/latest', (req, res) => {
     });
 });
 
-// Hlavní akce pípnutí NFC (střídá Příchod / Odchod a zapisuje čas)
+// Hlavní akce pípnutí NFC (střídá Příchod / Odchod a zapisuje správný čas v ČR)
 app.post('/api/attendance/nfc-tap', (req, res) => {
     const { deviceToken } = req.body;
     if (!deviceToken) return res.status(400).json({ error: 'Chybí token zařízení.' });
@@ -149,11 +149,22 @@ app.post('/api/attendance/nfc-tap', (req, res) => {
 
             const nextType = (lastLog && lastLog.type === 'Příchod') ? 'Odchod' : 'Příchod';
             
+            // Vynucení správného českého času (vyřeší posun o 2 hodiny zpět)
             const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const timeString = `${hours}:${minutes}`;
-            const dateString = now.toISOString().split('T')[0];
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Europe/Prague',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            const parts = formatter.formatToParts(now);
+            const getPart = (type) => parts.find(p => p.type === type)?.value || '';
+
+            const dateString = `${getPart('year')}-${getPart('month')}-${getPart('day')}`;
+            const timeString = `${getPart('hour')}:${getPart('minute')}`;
 
             db.run(
                 "INSERT INTO attendance (username, device_token, type, time, date) VALUES (?, ?, ?, ?, ?)",
@@ -448,7 +459,7 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// --- ADMINISTRACE S ODKAZEM NA KALENDÁŘ ( /admin.html ) ---
+// --- ADMINISTRACE S ODKAZEM NA KALENDÁŘ A SBAZOVACÍ NFC KARTOU ( /admin.html ) ---
 app.get('/admin.html', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -544,32 +555,38 @@ app.get('/admin.html', (req, res) => {
             </form>
         </div>
 
-        <!-- SEKCE SPRÁVY NFC A KALENDÁŘE (Zobrazí se POUZE pro StSi) -->
+        <!-- SBAZOVACÍ SEKCE NFC A KALENDÁŘE (Zobrazí se POUZE pro StSi) -->
         <div id="nfcManagementContainer" class="hidden" style="margin-bottom: 20px;">
-            <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #16a34a;">
-                <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📅 Odkaz na kalendář docházky</h3>
-                <p style="color: #94a3b8; font-size: 13px; margin-bottom: 5px;">Zkopírujte tento odkaz a přidejte si ho do svého Google Kalendáře / Apple Kalendáře jako odebíraný kalendář:</p>
-                <div id="calendar-link-box" class="calendar-box">Načítám odkaz...</div>
+            <details style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #16a34a; cursor: pointer;">
+                <summary style="font-size: 15px; font-weight: bold; color: #16a34a; outline: none; user-select: none;">
+                    📱 Správa NFC zařízení a Docházka <span style="font-size: 12px; color: #94a3b8; font-weight: normal;">(kliknutím rozbalíte/sbalíte)</span>
+                </summary>
+                
+                <div style="margin-top: 12px; cursor: default;" onclick="event.stopPropagation()">
+                    <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📅 Odkaz na kalendář docházky</h3>
+                    <p style="color: #94a3b8; font-size: 13px; margin-bottom: 5px;">Zkopírujte tento odkaz a přidejte si ho do svého Google Kalendáře / Apple Kalendáře jako odebíraný kalendář:</p>
+                    <div id="calendar-link-box" class="calendar-box">Načítám odkaz...</div>
 
-                <h3 style="margin-top:15px; font-size:15px; color: #16a34a;">📱 Správa NFC zařízení</h3>
-                <form id="new-device-form" style="margin-top: 10px;">
-                    <div class="form-group">
-                        <label>Token zařízení:</label>
-                        <input type="text" id="device-token-input" placeholder="např. dev_..." required autocomplete="off">
-                    </div>
-                    <div class="form-group">
-                        <label>Jméno uživatele / Umístění:</label>
-                        <input type="text" id="device-username" placeholder="např. Pavel" required autocomplete="off">
-                    </div>
-                    <button type="submit" class="btn" style="background: #16a34a;">Schválit a přidat zařízení</button>
-                </form>
+                    <h3 style="margin-top:15px; font-size:15px; color: #16a34a;">📱 Správa NFC zařízení</h3>
+                    <form id="new-device-form" style="margin-top: 10px;">
+                        <div class="form-group">
+                            <label>Token zařízení:</label>
+                            <input type="text" id="device-token-input" placeholder="např. dev_..." required autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label>Jméno uživatele / Umístění:</label>
+                            <input type="text" id="device-username" placeholder="např. Pavel" required autocomplete="off">
+                        </div>
+                        <button type="submit" class="btn" style="background: #16a34a;">Schválit a přidat zařízení</button>
+                    </form>
 
-                <h3 style="color: #f8fafc; font-size: 14px; margin-top: 15px;">Poslední stavy uživatelů:</h3>
-                <div id="attendance-latest-list" style="margin-top: 5px; font-size: 13px; color: #cbd5e1;">Načítám docházku...</div>
+                    <h3 style="color: #f8fafc; font-size: 14px; margin-top: 15px;">Poslední stavy uživatelů (Živě 1s):</h3>
+                    <div id="attendance-latest-list" style="margin-top: 5px; font-size: 13px; color: #cbd5e1;">Načítám docházku...</div>
 
-                <h3 style="color: #f8fafc; font-size: 14px; margin-top: 15px;">Seznam schválených zařízení:</h3>
-                <div id="nfc-devices-list" style="margin-top: 5px;">Načítání zařízení...</div>
-            </div>
+                    <h3 style="color: #f8fafc; font-size: 14px; margin-top: 15px;">Seznam schválených zařízení:</h3>
+                    <div id="nfc-devices-list" style="margin-top: 5px;">Načítání zařízení...</div>
+                </div>
+            </details>
         </div>
 
         <h3>Seznam vozidel v kartách</h3>
@@ -580,6 +597,7 @@ app.get('/admin.html', (req, res) => {
 <script>
     let currentUser = '';
     let allVehicles = [];
+    let attendanceInterval = null;
 
     // Automaticky vyplní aktuální URL kalendáře
     document.getElementById('calendar-link-box').innerText = window.location.origin + '/calendar.ics';
@@ -612,8 +630,12 @@ app.get('/admin.html', (req, res) => {
                 document.getElementById('nfcManagementContainer').classList.remove('hidden');
                 loadNfcDevices();
                 loadAttendanceSummary();
+
+                if (attendanceInterval) clearInterval(attendanceInterval);
+                attendanceInterval = setInterval(loadAttendanceSummary, 1000); // Polling každou 1 vteřinu
             } else {
                 document.getElementById('nfcManagementContainer').classList.add('hidden');
+                if (attendanceInterval) clearInterval(attendanceInterval);
             }
 
             loadData();
@@ -623,6 +645,7 @@ app.get('/admin.html', (req, res) => {
     });
 
     function logout() {
+        if (attendanceInterval) clearInterval(attendanceInterval);
         location.reload();
     }
 
@@ -711,12 +734,13 @@ app.get('/admin.html', (req, res) => {
         fetch('/api/vehicles/' + id, { method: 'DELETE' }).then(() => loadData());
     }
 
-    // --- SPRÁVA NFC A DOCHÁZKY ---
+    // --- SPRÁVA DOCHÁZKY A NFC ZAŘÍZENÍ ---
     async function loadAttendanceSummary() {
         try {
             const res = await fetch('/api/attendance/latest');
             const list = await res.json();
             const el = document.getElementById('attendance-latest-list');
+            if (!el) return;
             if (list.length === 0) {
                 el.innerHTML = '<span style="color: #94a3b8;">Zatím žádné záznamy docházky.</span>';
                 return;
