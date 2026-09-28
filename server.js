@@ -531,7 +531,7 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// --- ADMINISTRACE S MENU V LEVÉM HORNÍM ROHU ( /admin.html ) ---
+// --- ADMINISTRACE S TRVALÝM PŘIHLÁŠENÍM ( /admin.html ) ---
 app.get('/admin.html', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
@@ -737,13 +737,44 @@ app.get('/admin.html', (req, res) => {
 </div>
 
 <script>
-    let currentUser = '';
+    let currentUser = localStorage.getItem('pofelGarageUser') || '';
     let allVehicles = [];
     let completedJobs = [];
     let allUsers = [];
     let attendanceInterval = null;
 
     document.getElementById('calendar-link-box').innerText = window.location.origin + '/calendar.ics';
+
+    // Automatické přihlášení, pokud je uživatel uložený v paměti prohlížeče
+    window.addEventListener('DOMContentLoaded', () => {
+        if (currentUser) {
+            setupActiveSession(currentUser);
+        }
+    });
+
+    function setupActiveSession(username) {
+        currentUser = username;
+        document.getElementById('loggedUserDisplay').innerText = currentUser;
+        document.getElementById('loginView').classList.add('hidden');
+        document.getElementById('mechanicView').classList.remove('hidden');
+
+        if (currentUser.toLowerCase() === 'stsi') {
+            document.getElementById('menuNfcManagement').classList.remove('hidden');
+            document.getElementById('menuUserManagement').classList.remove('hidden');
+            loadNfcDevices();
+            loadAttendanceSummary();
+            loadAdminUsersList();
+
+            if (attendanceInterval) clearInterval(attendanceInterval);
+            attendanceInterval = setInterval(loadAttendanceSummary, 1000);
+        } else {
+            document.getElementById('menuNfcManagement').classList.add('hidden');
+            document.getElementById('menuUserManagement').classList.add('hidden');
+            if (attendanceInterval) clearInterval(attendanceInterval);
+        }
+
+        loadUsersAndData();
+    }
 
     function toggleMenu() {
         document.getElementById('appMenu').classList.toggle('show');
@@ -797,26 +828,9 @@ app.get('/admin.html', (req, res) => {
             }
 
             currentUser = data.username;
-            document.getElementById('loggedUserDisplay').innerText = currentUser;
-            document.getElementById('loginView').classList.add('hidden');
-            document.getElementById('mechanicView').classList.remove('hidden');
+            localStorage.setItem('pofelGarageUser', currentUser); // Uložení do prohlížeče
+            setupActiveSession(currentUser);
 
-            if (currentUser.toLowerCase() === 'stsi') {
-                document.getElementById('menuNfcManagement').classList.remove('hidden');
-                document.getElementById('menuUserManagement').classList.remove('hidden');
-                loadNfcDevices();
-                loadAttendanceSummary();
-                loadAdminUsersList();
-
-                if (attendanceInterval) clearInterval(attendanceInterval);
-                attendanceInterval = setInterval(loadAttendanceSummary, 1000);
-            } else {
-                document.getElementById('menuNfcManagement').classList.add('hidden');
-                document.getElementById('menuUserManagement').classList.add('hidden');
-                if (attendanceInterval) clearInterval(attendanceInterval);
-            }
-
-            loadUsersAndData();
         } catch (err) {
             errorEl.innerText = 'Chyba připojení k serveru.';
         }
@@ -824,6 +838,7 @@ app.get('/admin.html', (req, res) => {
 
     function logout() {
         if (attendanceInterval) clearInterval(attendanceInterval);
+        localStorage.removeItem('pofelGarageUser'); // Vymazání z paměti při odhlášení
         location.reload();
     }
 
