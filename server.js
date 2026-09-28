@@ -34,6 +34,23 @@ db.serialize(() => {
         password TEXT NOT NULL
     )`);
 
+    // Tabulka pro schválená NFC zařízení
+    db.run(`CREATE TABLE IF NOT EXISTS devices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_token TEXT UNIQUE NOT NULL,
+        username TEXT NOT NULL
+    )`);
+
+    // Tabulka pro záznamy docházky (příchody/odchody)
+    db.run(`CREATE TABLE IF NOT EXISTS attendance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        device_token TEXT NOT NULL,
+        type TEXT NOT NULL,
+        time TEXT NOT NULL,
+        date TEXT NOT NULL
+    )`);
+
     // Vynucení vytvoření výchozích uživatelů
     db.run("INSERT OR IGNORE INTO users (username, password) VALUES ('StSi', 'Stsi3103*')");
     db.run("INSERT OR IGNORE INTO users (username, password) VALUES ('DeLi', 'Deli3103*')");
@@ -58,10 +75,6 @@ app.post('/api/users', (req, res) => {
     });
 });
 
-// Připojení modulu docházky
-const attendanceRouter = require('./attendance')(db);
-app.use('/api/attendance', attendanceRouter);
-
 app.delete('/api/users/:id', (req, res) => {
     const { id } = req.params;
     db.get("SELECT username FROM users WHERE id = ?", [id], (err, row) => {
@@ -71,6 +84,91 @@ app.delete('/api/users/:id', (req, res) => {
         db.run("DELETE FROM users WHERE id = ?", [id], function(err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ message: 'Uživatel smazán' });
+        });
+    });
+});
+
+// --- API ENDPOINTY: DOCHÁZKA A NFC ---
+app.get('/api/attendance/devices', (req, res) => {
+    db.all("SELECT * FROM devices", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+app.post('/api/attendance/register-device', (req, res) => {
+    const { deviceToken, username } = req.body;
+    if (!deviceToken || !username) {
+        return res.status(400).json({ error: 'Chybí token nebo jméno.' });
+    }
+    db.run("INSERT OR REPLACE INTO devices (device_token, username) VALUES (?, ?)", [deviceToken.trim(), username.trim()], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Zařízení úspěšně registrováno' });
+    });
+});
+
+app.delete('/api/attendance/devices/:token', (req, res) => {
+    const { token } = req.params;
+    db.run("DELETE FROM devices WHERE device_token = ?", [token], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Zařízení odebráno' });
+    });
+});
+
+// Získání posledního stavu všech uživatelů pro administraci
+app.get('/api/attendance/latest', (req, res) => {
+    const query = `
+        SELECT a.* FROM attendance a
+        JOIN (
+            SELECT username, MAX(id) as max_id
+            FROM attendance
+            GROUP BY username
+        ) latest ON a.id = latest.max_id
+    `;
+    db.all(query, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Hlavní akce pípnutí NFC (střídá Příchod / Odchod a zapisuje čas)
+app.post('/api/attendance/nfc-tap', (req, res) => {
+    const { deviceToken } = req.body;
+    if (!deviceToken) return res.status(400).json({ error: 'Chybí token zařízení.' });
+
+    db.get("SELECT * FROM devices WHERE device_token = ?", [deviceToken], (err, device) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!device) {
+            return res.json({ needsRegistration: true });
+        }
+
+        const username = device.username;
+
+        // Zjistíme poslední záznam pro uživatele, abychom věděli, zda má následovat Příchod nebo Odchod
+        db.get("SELECT type FROM attendance WHERE username = ? ORDER BY id DESC LIMIT 1", [username], (err, lastLog) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // Pokud byl poslední záznam Příchod, teď bude Odchod. Jinak Příchod.
+            const nextType = (lastLog && lastLog.type === 'Příchod') ? 'Odchod' : 'Příchod';
+            
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const timeString = `${hours}:${minutes}`; // např. 07:00 nebo 16:32
+            const dateString = now.toISOString().split('T')[0];
+
+            db.run(
+                "INSERT INTO attendance (username, device_token, type, time, date) VALUES (?, ?, ?, ?, ?)",
+                [username, deviceToken, nextType, timeString, dateString],
+                function(err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({
+                        username: username,
+                        type: nextType,
+                        time: timeString
+                    });
+                }
+            );
         });
     });
 });
@@ -139,9 +237,9 @@ app.get('/nfc', (req, res) => {
                     statusMsg.style.display = 'none';
                     document.getElementById('res-username').innerText = data.username;
                     const typeEl = document.getElementById('res-type');
-                    typeEl.innerText = data.type;
+                    typeEl.innerText = data.type + ' (' + data.time + ')';
                     typeEl.style.background = data.type === 'Příchod' ? '#16a34a' : '#ca8a04';
-                    document.getElementById('res-time').innerText = data.time;
+                    document.getElementById('res-time').innerText = data.time + ' (' + data.type + ')';
                     document.getElementById('result-section').style.display = 'block';
                 } else {
                     statusMsg.innerHTML = '<span style="color: #f87171;">Chyba: ' + (data.error || 'Neznámá chyba') + '</span>';
@@ -261,8 +359,6 @@ app.get('/', (req, res) => {
         input, button { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 16px; }
         button { background: #2563eb; color: white; border: none; font-weight: bold; cursor: pointer; transition: background 0.2s; }
         button:hover { background: #1d4ed8; }
-        .actions a { display: inline-block; padding: 10px 16px; margin-top: 10px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 14px; text-align: center; }
-        .btn-call { background: #16a34a; color: white; }
         .badge { display: inline-block; padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; background: #334155; margin-top: 10px; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .admin-link { color: #38bdf8; text-decoration: none; font-size: 14px; }
@@ -312,7 +408,7 @@ app.get('/', (req, res) => {
                         <div><span class="badge" style="background: #1e40af; color: #bfdbfe; font-size: 16px;">\${vehicle.status}</span></div>
                         \${vehicle.note ? \`<p style="margin: 15px 0 5px 0; color: #cbd5e1;"><strong>Poznámka servisu:</strong> \${vehicle.note}</p>\` : ''}
                         <div style="margin-top: 20px;">
-                            <a href="tel:+420601551770" class="btn-call">📞 Zavolat do servisu</a>
+                            <a href="tel:+420601551770" style="display:block; background: #16a34a; color:white; padding:12px; border-radius:8px; text-align:center; text-decoration:none; font-weight:bold;">📞 Zavolat do servisu</a>
                         </div>
                     </div>
                 \`;
@@ -325,16 +421,13 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// --- ADMINISTRACE S NFC MANAŽEREM ( /admin.html ) ---
+// --- ADMINISTRACE S NFC MANAŽEREM A PŘEHLEDEM DOCHÁZKY ( /admin.html ) ---
 app.get('/admin.html', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
     <title>P&R MONT - Administrace mechaniků</title>
     <style>
         * { box-sizing: border-box; }
@@ -342,26 +435,21 @@ app.get('/admin.html', (req, res) => {
         .container { max-width: 600px; margin: auto; background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid #334155; }
         h1, h2, h3 { color: #38bdf8; }
         .hidden { display: none !important; }
-        
         .form-group { margin-bottom: 12px; }
         label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 13px; color: #94a3b8; }
         input, select, textarea { width: 100%; padding: 10px; border: 1px solid #475569; background: #0f172a; color: white; border-radius: 6px; font-size: 15px; }
         .btn { background: #2563eb; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; font-weight: bold; text-align: center; display: inline-block; text-decoration: none; }
         .btn:hover { background: #1d4ed8; }
-        
         .card-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
         .car-card { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 14px; }
         .car-header { display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: bold; color: #38bdf8; margin-bottom: 8px; }
         .car-row { font-size: 13px; margin-bottom: 6px; color: #cbd5e1; }
-        
         .card-actions-row { display: flex; gap: 6px; margin-top: 10px; }
         .btn-call { background: #16a34a; color: white; padding: 8px; border-radius: 6px; text-align: center; text-decoration: none; flex: 1; font-weight: bold; font-size: 12px; }
         .btn-sms { background: #0ea5e9; color: white; padding: 8px; border-radius: 6px; text-align: center; text-decoration: none; flex: 1; font-weight: bold; font-size: 12px; }
         .btn-edit { background: #eab308; color: #000; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; font-size: 12px; }
         .btn-delete { background: #dc2626; color: #fff; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; font-size: 12px; }
-
         .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 13px; border-bottom: 1px solid #334155; padding-bottom: 8px; }
-        .admin-actions { display: flex; gap: 10px; align-items: center; }
         .error-msg { color: #f87171; font-size: 14px; margin-top: 5px; }
     </style>
 </head>
@@ -391,14 +479,12 @@ app.get('/admin.html', (req, res) => {
     <div id="mechanicView" class="hidden">
         <div class="top-nav">
             <span>Mechanik: <strong id="loggedUserDisplay"></strong></span>
-            <div class="admin-actions">
-                <a href="#" onclick="logout()" style="color: #f87171; font-weight: bold; text-decoration: none;">Odhlásit</a>
-            </div>
+            <div><a href="#" onclick="logout()" style="color: #f87171; font-weight: bold; text-decoration: none;">Odhlásit</a></div>
         </div>
         <h1>Správa zakázek</h1>
 
         <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;">
-            <h3 id="formTitle" style="margin-top:0; font-size:15px;">Přidat vozidlo</h3>
+            <h3 style="margin-top:0; font-size:15px;">Přidat vozidlo</h3>
             <form id="vehicleForm" onsubmit="saveVehicle(event)">
                 <div class="form-group">
                     <label>SPZ:</label>
@@ -430,11 +516,11 @@ app.get('/admin.html', (req, res) => {
             </form>
         </div>
 
-        <!-- SEKCE SPRÁVY NFC ZAŘÍZENÍ (Zobrazí se POUZE pro StSi) -->
+        <!-- SEKCE SPRÁVY NFC A DOCHÁZKY (Zobrazí se POUZE pro StSi) -->
         <div id="nfcManagementContainer" class="hidden" style="margin-bottom: 20px;">
             <div style="background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #16a34a;">
-                <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📱 Správa NFC zařízení (Docházka)</h3>
-                <p style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">Token zjistíte tak, že na novém telefonu otevřete adresu <code style="color:#38bdf8;">/nfc</code>.</p>
+                <h3 style="margin-top:0; font-size:15px; color: #16a34a;">📱 Správa docházky a NFC zařízení</h3>
+                <p style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">Token zjistíte otevřením adresy <code style="color:#38bdf8;">/nfc</code> na daném zařízení.</p>
                 
                 <form id="new-device-form">
                     <div class="form-group">
@@ -442,14 +528,17 @@ app.get('/admin.html', (req, res) => {
                         <input type="text" id="device-token-input" placeholder="např. dev_..." required autocomplete="off">
                     </div>
                     <div class="form-group">
-                        <label>Jméno / Umístění:</label>
-                        <input type="text" id="device-username" placeholder="např. Pavel / Dílna" required autocomplete="off">
+                        <label>Jméno uživatele / Umístění:</label>
+                        <input type="text" id="device-username" placeholder="např. Pavel" required autocomplete="off">
                     </div>
                     <button type="submit" class="btn" style="background: #16a34a;">Schválit a přidat zařízení</button>
                 </form>
 
+                <h3 style="color: #f8fafc; font-size: 14px; margin-top: 15px;">Poslední stavy uživatelů:</h3>
+                <div id="attendance-latest-list" style="margin-top: 5px; font-size: 13px; color: #cbd5e1;">Načítám docházku...</div>
+
                 <h3 style="color: #f8fafc; font-size: 14px; margin-top: 15px;">Seznam schválených zařízení:</h3>
-                <div id="nfc-devices-list" style="margin-top: 10px;">Načítání zařízení...</div>
+                <div id="nfc-devices-list" style="margin-top: 5px;">Načítání zařízení...</div>
             </div>
         </div>
 
@@ -489,6 +578,7 @@ app.get('/admin.html', (req, res) => {
             if (currentUser.toLowerCase() === 'stsi') {
                 document.getElementById('nfcManagementContainer').classList.remove('hidden');
                 loadNfcDevices();
+                loadAttendanceSummary();
             } else {
                 document.getElementById('nfcManagementContainer').classList.add('hidden');
             }
@@ -588,7 +678,27 @@ app.get('/admin.html', (req, res) => {
         fetch('/api/vehicles/' + id, { method: 'DELETE' }).then(() => loadData());
     }
 
-    // --- SPRÁVA NFC ZAŘÍZENÍ ---
+    // --- SPRÁVA NFC A DOCHÁZKY ---
+    async function loadAttendanceSummary() {
+        try {
+            const res = await fetch('/api/attendance/latest');
+            const list = await res.json();
+            const el = document.getElementById('attendance-latest-list');
+            if (list.length === 0) {
+                el.innerHTML = '<span style="color: #94a3b8;">Zatím žádné záznamy docházky.</span>';
+                return;
+            }
+            el.innerHTML = list.map(item => \`
+                <div style="background: #1e293b; padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; border: 1px solid #334155; display: flex; justify-content: space-between;">
+                    <span>👤 <strong>\${item.username}</strong></span>
+                    <span><strong style="color: \${item.type === 'Příchod' ? '#16a34a' : '#ca8a04'};">\${item.type}</strong> v \${item.time} (\${item.date})</span>
+                </div>
+            \`).join('');
+        } catch (err) {
+            console.error('Chyba při načítání docházky');
+        }
+    }
+
     async function loadNfcDevices() {
         try {
             const res = await fetch('/api/attendance/devices');
@@ -622,7 +732,7 @@ app.get('/admin.html', (req, res) => {
             const res = await fetch('/api/attendance/register-device', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceToken, username, isAdmin: 0 })
+                body: JSON.stringify({ deviceToken, username })
             });
             
             if (res.ok) {
